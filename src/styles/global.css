@@ -178,7 +178,7 @@ a {
 .btn--primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: white;
+  color: var(--accent-contrast);
 }
 
 .btn--primary:hover:not(:disabled),

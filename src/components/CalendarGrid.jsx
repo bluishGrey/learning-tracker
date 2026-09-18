@@ -68,7 +68,7 @@ export default function CalendarGrid({ monthKey, subjectsOnDate }) {
               <span className="calendar__num">{day}</span>
               <span className="calendar__dots">
                 {shown.map((subject) => (
-                  <SubjectDot key={subject.id} hue={subject.colorHue} size={7} />
+                  <SubjectDot key={subject.id} subject={subject} size={7} />
                 ))}
                 {overflow > 0 && <span className="calendar__more">+{overflow}</span>}
               </span>

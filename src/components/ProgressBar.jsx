@@ -1,10 +1,10 @@
 import { layeredBackground } from '../lib/color.js';
 
 /**
- * 진도율 막대. 색은 과목의 hue, 채움 비율은 진도율.
+ * 진도율 막대. 색은 과목 색, 채움 비율은 진도율.
  * alpha 는 활성도라서 오래 손대지 않은 과목은 막대도 흐려진다.
  */
-export default function ProgressBar({ percent, hue, alpha = 1, label }) {
+export default function ProgressBar({ percent, subject, alpha = 1, label }) {
   return (
     <div
       className="progress"
@@ -16,7 +16,7 @@ export default function ProgressBar({ percent, hue, alpha = 1, label }) {
     >
       <div
         className="progress__fill"
-        style={{ ...layeredBackground(hue, alpha), width: `${percent}%` }}
+        style={{ ...layeredBackground(subject, alpha), width: `${percent}%` }}
       />
     </div>
   );

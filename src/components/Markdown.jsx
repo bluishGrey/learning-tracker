@@ -1,20 +1,22 @@
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { lazy, Suspense } from 'react';
 
-/** 외부 링크는 새 탭으로 열고 referrer 를 넘기지 않는다 */
-const components = {
-  a: ({ node, ...props }) => (
-    <a {...props} target="_blank" rel="noopener noreferrer" />
-  ),
-};
+/**
+ * react-markdown + remark-gfm 은 번들의 큰 덩어리를 차지하는데,
+ * 첫 화면(캘린더)에서는 전혀 쓰이지 않는다. 기록 상세를 열 때 받아온다.
+ *
+ * 네트워크가 느린 곳에서도 내용은 바로 읽을 수 있어야 하므로,
+ * 로딩 중에는 원문을 그대로 보여준다 (빈 화면이나 스피너 대신).
+ */
+const MarkdownBody = lazy(() => import('./MarkdownBody.jsx'));
 
 export default function Markdown({ children }) {
   if (!children?.trim()) return null;
+
   return (
     <div className="markdown">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-        {children}
-      </ReactMarkdown>
+      <Suspense fallback={<pre className="markdown__raw">{children}</pre>}>
+        <MarkdownBody>{children}</MarkdownBody>
+      </Suspense>
     </div>
   );
 }

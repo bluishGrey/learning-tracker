@@ -169,6 +169,14 @@ export function validateStateShape(data) {
     if (!Number.isFinite(Number(s.colorHue))) {
       errors.push({ path: at('colorHue'), message: '색상값(colorHue)이 숫자가 아닙니다.' });
     }
+    // customColor 는 v2 에서 추가된 선택 필드다. 형식이 틀리면 경고만 하고
+    // 자동 배정 색으로 떨어뜨린다 — 색 하나 때문에 가져오기를 막을 이유가 없다.
+    if (s.customColor != null && typeof s.customColor !== 'string') {
+      warnings.push({
+        path: at('customColor'),
+        message: '사용자 지정 색 형식이 올바르지 않아 자동 배정 색을 사용합니다.',
+      });
+    }
     if (!Number.isFinite(Number(s.totalBlocks)) || Number(s.totalBlocks) < 0) {
       errors.push({
         path: at('totalBlocks'),

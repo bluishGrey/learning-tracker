@@ -250,7 +250,7 @@
 }
 
 .calendar__weekday--sat {
-  color: var(--accent);
+  color: var(--weekend-sat);
 }
 
 .calendar__day {
@@ -409,7 +409,7 @@
   border-radius: 5px;
   font-size: 0.75rem;
   line-height: 1;
-  color: white;
+  color: var(--accent-contrast);
 }
 
 .blockrow--done .blockrow__box {
@@ -896,4 +896,417 @@
   .appbar__row .btn {
     font-size: 0.76rem;
   }
+}
+
+/* ═══ 사이드바 · 앱 껍데기 ═══════════════════════════════ */
+
+:root {
+  /* 사이드바를 상단 바 아래에 고정하기 위한 높이 (한 줄짜리 상태 문구 기준) */
+  --appbar-h: 76px;
+}
+
+/* 사이드바가 생기면서 상단 바는 화면 전체 폭을 쓴다 */
+.appbar__inner {
+  max-width: none;
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.appbar__burger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+}
+
+.appbar__burger:hover {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+/* 가운데 줄 하나 + 위아래 가짜 요소 = 햄버거 3줄 */
+.appbar__burgerbars,
+.appbar__burgerbars::before,
+.appbar__burgerbars::after {
+  display: block;
+  width: 17px;
+  height: 1.5px;
+  border-radius: 2px;
+  background: var(--text);
+  content: '';
+}
+
+.appbar__burgerbars {
+  position: relative;
+}
+
+.appbar__burgerbars::before {
+  position: absolute;
+  top: -5px;
+}
+
+.appbar__burgerbars::after {
+  position: absolute;
+  top: 5px;
+}
+
+.shell {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  min-height: 0;
+}
+
+.shell__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.shell__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  border: none;
+  padding: 0;
+  background: rgb(0 0 0 / 0.5);
+  cursor: pointer;
+}
+
+.sidebar {
+  width: var(--sidebar-w);
+  flex: none;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: var(--sp-3) var(--sp-2) var(--sp-5);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (min-width: 900px) {
+  .sidebar {
+    position: sticky;
+    top: var(--appbar-h);
+    height: calc(100dvh - var(--appbar-h));
+  }
+
+  /* 넓은 화면에서 접으면 자리를 아예 비운다 */
+  .sidebar:not(.sidebar--open) {
+    display: none;
+  }
+}
+
+/* 좁은 화면에서는 본문을 밀지 않고 위에 덮인다 */
+@media (max-width: 899px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 60;
+    width: min(84vw, var(--sidebar-w));
+    padding-top: calc(env(safe-area-inset-top) + var(--sp-4));
+    box-shadow: var(--shadow-lg);
+    transform: translateX(-100%);
+    transition: transform 0.18s ease;
+  }
+
+  .sidebar--open {
+    transform: none;
+  }
+}
+
+.sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: var(--sp-3);
+}
+
+.sidebar__navlink {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 38px;
+  padding: 0 var(--sp-2);
+  border-radius: var(--radius-sm);
+  font-size: 0.86rem;
+  color: var(--text-dim);
+}
+
+.sidebar__navlink:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.sidebar__navlink--on {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.sidebar__sectionhead {
+  border-top: 1px solid var(--border);
+  padding-top: var(--sp-3);
+  margin-bottom: var(--sp-1);
+}
+
+.sidebar__sectiontitle {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 34px;
+  padding: 0 var(--sp-2);
+  border-radius: var(--radius-sm);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.sidebar__sectiontitle:hover {
+  background: var(--surface-2);
+  color: var(--accent);
+}
+
+.sidebar__sectioncount {
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.sidebar__empty {
+  padding: var(--sp-3) var(--sp-2);
+  font-size: 0.82rem;
+  color: var(--text-faint);
+  line-height: 1.7;
+}
+
+.sidebar__emptylink {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+/* ─── 트리 ─────────────────────────────────────────────── */
+
+.tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tree--nested {
+  /* 세로 안내선 — 깊이를 한눈에 */
+  margin-left: 15px;
+  padding-left: var(--sp-2);
+  border-left: 1px solid var(--border);
+}
+
+.tree__row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: var(--radius-sm);
+  min-height: 34px;
+}
+
+.tree__row:hover {
+  background: var(--surface-2);
+}
+
+.tree__row--active {
+  background: var(--accent-soft);
+}
+
+.tree__row--active .tree__label {
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.tree__toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 34px;
+  padding: 0 var(--sp-1);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.tree__chevron {
+  flex: none;
+  width: 12px;
+  font-size: 0.7rem;
+  color: var(--text-faint);
+  transition: transform 0.12s ease;
+}
+
+.tree__chevron--open {
+  transform: rotate(90deg);
+}
+
+.tree__label {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.84rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree__label--done {
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+
+.tree__count {
+  flex: none;
+  font-size: 0.7rem;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.tree__go {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  color: var(--text-faint);
+  font-size: 1rem;
+}
+
+.tree__go:hover {
+  background: var(--surface-3);
+  color: var(--accent);
+}
+
+.tree__entry {
+  padding: 0 var(--sp-2) 0 22px;
+  gap: var(--sp-2);
+}
+
+.tree__date {
+  flex: none;
+  font-size: 0.7rem;
+  color: var(--text-faint);
+}
+
+.tree__none {
+  padding: var(--sp-1) var(--sp-2) var(--sp-1) 22px;
+  font-size: 0.76rem;
+  color: var(--text-faint);
+}
+
+/* ─── 홈 ───────────────────────────────────────────────── */
+
+.home__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.home__head .btn {
+  flex: none;
+}
+
+.home__sub {
+  margin-bottom: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.home__dots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+/* ─── 색상 피커 ────────────────────────────────────────── */
+
+.colorpicker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.colorpicker__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.colorpicker__preview {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+}
+
+.colorpicker__native {
+  cursor: pointer;
+}
+
+.colorpicker__swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.swatch {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  box-shadow: 0 0 0 1px var(--border);
+  cursor: pointer;
+  padding: 0;
+}
+
+.swatch--on {
+  border-color: var(--text);
+  box-shadow: 0 0 0 1px var(--text);
+}
+
+.swatch--auto {
+  width: auto;
+  min-width: 56px;
+  border-radius: 999px;
+  padding: 0 var(--sp-2);
+}
+
+.swatch__label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: rgb(0 0 0 / 0.65);
+}
+
+/* ─── 지연 로딩 대체 표시 ──────────────────────────────── */
+
+.markdown__raw {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.75;
+  margin: 0;
+}
+
+.svg-embed--loading {
+  color: var(--text-faint);
+  font-size: 0.82rem;
 }

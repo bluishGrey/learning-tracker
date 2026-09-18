@@ -15,7 +15,7 @@ export default function SubjectCard({ row }) {
   return (
     <Link to={`/subjects/${subject.id}`} className="card subjectcard">
       <div className="subjectcard__head">
-        <SubjectDot hue={subject.colorHue} alpha={alpha} size={12} />
+        <SubjectDot subject={subject} alpha={alpha} size={12} />
         <span className="card__title">{subject.name || '(이름 없음)'}</span>
         <div className="spacer" />
         <span className="subjectcard__percent">
@@ -25,7 +25,7 @@ export default function SubjectCard({ row }) {
 
       <ProgressBar
         percent={progress.percent}
-        hue={subject.colorHue}
+        subject={subject}
         alpha={alpha}
         label={`${subject.name} 진도율`}
       />

@@ -10,8 +10,13 @@
 
 import { newId } from '../lib/id.js';
 import { todayKey } from '../lib/date.js';
+import { normalizeHex } from '../lib/color.js';
 
-export const SCHEMA_VERSION = 1;
+/**
+ * v1 → v2: Subject 에 사용자 지정 색(customColor)이 추가되었다.
+ * 자동 배정된 colorHue 는 그대로 두고, customColor 가 있으면 렌더링에서만 우선한다.
+ */
+export const SCHEMA_VERSION = 2;
 
 /** localStorage 메인 키 */
 export const STORAGE_KEY = 'learning-tracker:v1';
@@ -49,12 +54,13 @@ export function createInitialState() {
 
 // ─── 엔티티 팩토리 ─────────────────────────────────────────
 
-export function makeSubject({ name, totalBlocks = 0, colorHue = 0 }) {
+export function makeSubject({ name, totalBlocks = 0, colorHue = 0, customColor = null }) {
   const now = nowIso();
   return {
     id: newId(),
     name: String(name ?? '').trim(),
     colorHue,
+    customColor: normalizeCustomColor(customColor),
     totalBlocks: toNonNegativeInt(totalBlocks),
     createdAt: now,
     updatedAt: now,
@@ -123,6 +129,14 @@ export function normalizeTitle(title) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+/**
+ * 사용자 지정 색은 '#rrggbb' 로만 보관한다.
+ * 유효하지 않으면 null 로 떨어뜨려 자동 배정 색을 쓰게 한다.
+ */
+export function normalizeCustomColor(value) {
+  return normalizeHex(value);
+}
+
 export function normalizeSvg(svgCode) {
   if (typeof svgCode !== 'string') return null;
   const trimmed = svgCode.trim();
@@ -141,8 +155,16 @@ export function toNonNegativeInt(value) {
  * 버전이 올라갈 때마다 여기에 단계를 추가한다. (v1 → v2 → ... 순차 적용)
  */
 const MIGRATIONS = {
-  // 예시:
-  // 1: (state) => ({ ...state, settings: { ...state.settings, newField: 기본값 } }),
+  /** v1 → v2: Subject 에 customColor(사용자 지정 색) 필드 추가 */
+  1: (state) => ({
+    ...state,
+    subjects: Object.fromEntries(
+      Object.entries(state.subjects ?? {}).map(([id, subject]) => [
+        id,
+        { ...subject, customColor: normalizeCustomColor(subject.customColor) },
+      ])
+    ),
+  }),
 };
 
 /**

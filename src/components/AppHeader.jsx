@@ -11,7 +11,7 @@ import ImportDialog from './ImportDialog.jsx';
  * 공용 PC를 오가는 사용 환경에서는 이 두 버튼이 부가 기능이 아니라
  * 데이터를 잃지 않기 위한 주 동선이기 때문이다.
  */
-export default function AppHeader() {
+export default function AppHeader({ sidebarOpen, onToggleSidebar }) {
   const { exportStatus } = useStore();
   const actions = useActions();
   const fileRef = useRef(null);
@@ -38,6 +38,16 @@ export default function AppHeader() {
       <header className="appbar">
         <div className="appbar__inner">
           <div className="appbar__row">
+            <button
+              type="button"
+              className="appbar__burger"
+              onClick={onToggleSidebar}
+              aria-expanded={sidebarOpen}
+              aria-label={`사이드바 ${sidebarOpen ? '닫기' : '열기'} (Ctrl+B)`}
+              title="사이드바 (Ctrl+B)"
+            >
+              <span className="appbar__burgerbars" aria-hidden="true" />
+            </button>
             <Link to="/" className="appbar__brand">
               학습 트래커
             </Link>

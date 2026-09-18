@@ -13,6 +13,7 @@ import {
   normalizeTags,
   normalizeTitle,
   normalizeSvg,
+  normalizeCustomColor,
   toNonNegativeInt,
   createInitialState,
 } from '../storage/schema.js';
@@ -45,7 +46,7 @@ export function reducer(state, action) {
   switch (action.type) {
     // ─── Subject ───────────────────────────────────────────
     case ACTIONS.SUBJECT_ADD: {
-      const { id, name, totalBlocks } = action;
+      const { id, name, totalBlocks, customColor } = action;
 
       // 이미 쓰이는 색과 겹치지 않는 다음 순번을 고른다.
       // (백업 병합으로 순번이 건너뛰어졌을 수 있으므로 커서만 믿지 않는다)
@@ -63,7 +64,10 @@ export function reducer(state, action) {
           [id]: {
             id,
             name: String(name ?? '').trim(),
+            // 자동 배정 색은 사용자가 색을 직접 골랐더라도 그대로 남긴다.
+            // 골든 앵글 순서와 색 충돌 판정이 계속 이 값으로만 이뤄지기 때문이다.
             colorHue: hue,
+            customColor: normalizeCustomColor(customColor),
             totalBlocks: toNonNegativeInt(totalBlocks),
             createdAt: at,
             updatedAt: at,
@@ -80,6 +84,10 @@ export function reducer(state, action) {
       if (action.patch.name !== undefined) patch.name = String(action.patch.name).trim();
       if (action.patch.totalBlocks !== undefined) {
         patch.totalBlocks = toNonNegativeInt(action.patch.totalBlocks);
+      }
+      // null 을 넘기면 자동 배정 색으로 되돌아간다.
+      if (action.patch.customColor !== undefined) {
+        patch.customColor = normalizeCustomColor(action.patch.customColor);
       }
       return touch({
         ...state,

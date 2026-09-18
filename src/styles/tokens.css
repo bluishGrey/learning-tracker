@@ -1,39 +1,61 @@
-/* 디자인 토큰 — 색·간격·타이포의 단일 출처 */
+/*
+ * 디자인 토큰 — 색·간격·타이포의 단일 출처.
+ *
+ * 팔레트는 Claude 의 톤을 따른다.
+ *   Near Black  #141413  순수 검정이 아니라 올리브가 살짝 도는 따뜻한 어두움
+ *   Terracotta  #c96442  주요 포인트 컬러
+ *   Coral       #d97757  보조 강조
+ *   Parchment   #f5f4ed  라이트 모드 배경 / 다크 모드 본문 글자색
+ *
+ * 회색 계열도 전부 중성 회색이 아니라 약간의 노랑-초록을 섞어 배경과 같은
+ * 온도를 유지한다. 중성 회색을 쓰면 따뜻한 배경 위에서 푸르게 떠 보인다.
+ */
 
 :root {
-  color-scheme: light dark;
+  color-scheme: dark light;
 
-  /* 표면 */
-  --bg: hsl(0 0% 99%);
-  --surface: hsl(0 0% 100%);
-  --surface-2: hsl(220 14% 96%);
-  --surface-3: hsl(220 13% 91%);
-  --border: hsl(220 13% 88%);
-  --border-strong: hsl(220 9% 78%);
+  /* ─ 표면 (다크가 기본) ─ */
+  --bg: #141413;
+  --surface: #1c1b19;
+  --surface-2: #24231f;
+  --surface-3: #2f2d28;
+  --border: #35332d;
+  --border-strong: #4c4941;
 
-  /* 글자 */
-  --text: hsl(220 18% 12%);
-  --text-dim: hsl(220 9% 44%);
-  --text-faint: hsl(220 8% 60%);
+  /* ─ 글자 ─ */
+  --text: #f5f4ed;
+  --text-dim: #b3afa2;
+  --text-faint: #807d72;
 
-  /* 의미색 */
-  --accent: hsl(221 83% 53%);
-  --accent-soft: hsl(221 83% 96%);
-  --danger: hsl(0 72% 47%);
-  --danger-soft: hsl(0 80% 97%);
-  --warn: hsl(32 90% 44%);
-  --warn-soft: hsl(40 90% 95%);
-  --success: hsl(152 60% 36%);
-  --success-soft: hsl(150 60% 96%);
+  /* ─ 포인트 ─ */
+  --accent: #c96442;
+  --accent-2: #d97757;
+  --accent-soft: #33201a;
+  --accent-contrast: #ffffff;
+
+  /*
+   * 의미색.
+   * danger 는 테라코타(hue 15°)와 헷갈리지 않도록 채도를 훨씬 높인 붉은색을 쓴다.
+   * warn 은 노랑 쪽으로 충분히 밀어 둔다.
+   */
+  --danger: #e5484d;
+  --danger-soft: #3a1b1d;
+  --warn: #e0a83a;
+  --warn-soft: #362a12;
+  --success: #6cbf7a;
+  --success-soft: #1b2f20;
 
   /*
    * 과목 색 레이어의 바탕.
    * 활성도 알파가 0이 되면 이 회색이 그대로 드러나 무채색이 된다.
    * (채도를 낮추는 게 아니라 알파만 내린다 — README 의 색상 규칙 참고)
    */
-  --inactive-gray: hsl(0 0% 72%);
+  --inactive-gray: #46433c;
 
-  /* 간격 */
+  /* 토요일 — 강조색(테라코타)과 의미가 겹치지 않게 파랑을 따로 둔다 */
+  --weekend-sat: #7ba7d9;
+
+  /* ─ 간격 ─ */
   --sp-1: 4px;
   --sp-2: 8px;
   --sp-3: 12px;
@@ -48,9 +70,9 @@
   /* 터치 목표 최소 크기 — 안드로이드 크롬 기준 */
   --tap: 44px;
 
-  --shadow-sm: 0 1px 2px hsl(220 20% 10% / 0.06);
-  --shadow: 0 2px 8px hsl(220 20% 10% / 0.08);
-  --shadow-lg: 0 8px 32px hsl(220 20% 10% / 0.18);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow: 0 2px 8px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 8px 32px rgb(0 0 0 / 0.6);
 
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Pretendard,
     'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif;
@@ -58,35 +80,39 @@
     'D2Coding', monospace;
 
   --header-h: 56px;
+  --sidebar-w: 268px;
 }
 
-@media (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: light) {
   :root {
-    --bg: hsl(220 18% 10%);
-    --surface: hsl(220 16% 13%);
-    --surface-2: hsl(220 15% 17%);
-    --surface-3: hsl(220 14% 22%);
-    --border: hsl(220 12% 24%);
-    --border-strong: hsl(220 10% 36%);
+    --bg: #f5f4ed;
+    --surface: #fbfaf5;
+    --surface-2: #edece2;
+    --surface-3: #e2e0d4;
+    --border: #dbd9cc;
+    --border-strong: #b9b6a6;
 
-    --text: hsl(220 15% 93%);
-    --text-dim: hsl(220 9% 65%);
-    --text-faint: hsl(220 8% 50%);
+    --text: #141413;
+    --text-dim: #5d5a50;
+    --text-faint: #8b8879;
 
-    --accent: hsl(217 91% 65%);
-    --accent-soft: hsl(221 60% 20%);
-    --danger: hsl(0 84% 68%);
-    --danger-soft: hsl(0 50% 20%);
-    --warn: hsl(38 92% 60%);
-    --warn-soft: hsl(38 50% 18%);
-    --success: hsl(152 55% 55%);
-    --success-soft: hsl(152 40% 18%);
+    --accent: #b2563a;
+    --accent-2: #c96442;
+    --accent-soft: #f6e9e3;
+    --accent-contrast: #ffffff;
 
-    /* 어두운 배경에서는 밝은 회색이 튀므로 한 단계 낮춘다 */
-    --inactive-gray: hsl(0 0% 38%);
+    --danger: #c4282d;
+    --danger-soft: #fae9e9;
+    --warn: #96650c;
+    --warn-soft: #f9efd9;
+    --success: #2f7a44;
+    --success-soft: #e6f2e8;
 
-    --shadow-sm: 0 1px 2px hsl(0 0% 0% / 0.3);
-    --shadow: 0 2px 8px hsl(0 0% 0% / 0.4);
-    --shadow-lg: 0 8px 32px hsl(0 0% 0% / 0.6);
+    --inactive-gray: #c6c3b6;
+    --weekend-sat: #2f6fb0;
+
+    --shadow-sm: 0 1px 2px rgb(20 20 19 / 0.06);
+    --shadow: 0 2px 8px rgb(20 20 19 / 0.09);
+    --shadow-lg: 0 8px 32px rgb(20 20 19 / 0.18);
   }
 }

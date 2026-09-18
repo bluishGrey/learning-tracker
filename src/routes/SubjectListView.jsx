@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore, useActions } from '../state/StoreContext.jsx';
-import { selectSubjectList } from '../state/selectors.js';
+import { selectSubjectList, selectNextAutoHue } from '../state/selectors.js';
 import Breadcrumb from '../components/Breadcrumb.jsx';
 import SubjectCard from '../components/SubjectCard.jsx';
+import ColorPicker from '../components/ColorPicker.jsx';
 import Sheet from '../components/Sheet.jsx';
 
 /** 경로 B의 첫 단계 — 과목 목록 (진도율·활성도) */
@@ -15,17 +16,25 @@ export default function SubjectListView() {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const [totalBlocks, setTotalBlocks] = useState('');
+  const [customColor, setCustomColor] = useState(null);
 
   const rows = selectSubjectList(state, index);
+  // 이 과목이 받게 될 자동 배정 색 — 피커의 기본값으로 미리 보여준다.
+  const nextAutoHue = selectNextAutoHue(state);
 
   const submit = (event) => {
     event.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) return;
-    const id = actions.addSubject({ name: trimmed, totalBlocks: Number(totalBlocks) || 0 });
+    const id = actions.addSubject({
+      name: trimmed,
+      totalBlocks: Number(totalBlocks) || 0,
+      customColor,
+    });
     setAdding(false);
     setName('');
     setTotalBlocks('');
+    setCustomColor(null);
     navigate(`/subjects/${id}`);
   };
 
@@ -112,10 +121,10 @@ export default function SubjectListView() {
             </p>
           </div>
 
-          <p className="field__hint">
-            색은 만든 순서대로 자동 배정됩니다(골든 앵글 137.5°). 직접 고를 필요가 없고, 과목을 지워도
-            그 색은 다시 쓰이지 않습니다.
-          </p>
+          <div className="field">
+            <span className="field__label">색상</span>
+            <ColorPicker value={customColor} autoHue={nextAutoHue} onChange={setCustomColor} />
+          </div>
         </form>
       </Sheet>
     </main>

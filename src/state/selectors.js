@@ -13,7 +13,7 @@ import {
   daysInYear,
   parseDateKey,
 } from '../lib/date.js';
-import { activityAlpha, densityAlpha } from '../lib/color.js';
+import { activityAlpha, densityAlpha, nextFreeHueIndex } from '../lib/color.js';
 
 /**
  * 밀도 계산 시 적용할 최소 기간.
@@ -91,6 +91,18 @@ export function selectProgress(state, index, subjectId) {
     /** 실제 Block 수가 목표를 넘었으면 경고 표시용 */
     overflow: total > 0 && blocks.length > total,
   };
+}
+
+/**
+ * 다음에 만들 과목이 받게 될 자동 배정 색.
+ * 과목 추가 폼에서 색상 피커의 기본값으로 미리 보여주기 위해 쓴다.
+ * (reducer 가 실제로 쓰는 계산과 같은 함수를 통과시킨다)
+ */
+export function selectNextAutoHue(state) {
+  const used = Object.values(state.subjects)
+    .map((s) => Number(s.colorHue))
+    .filter(Number.isFinite);
+  return nextFreeHueIndex(used, state.settings.hueIndex).hue;
 }
 
 /** 마지막 기록일로부터 며칠 지났는지. 기록이 없으면 null */

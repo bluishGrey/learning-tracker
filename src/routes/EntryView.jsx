@@ -80,7 +80,7 @@ export default function EntryView() {
             className={`jumpchip${!viaCalendar ? ' jumpchip--current' : ''}`}
             title="과목 경로로 이동"
           >
-            <SubjectDot hue={subject.colorHue} size={8} />
+            <SubjectDot subject={subject} size={8} />
             {subject.name} / {block.name}
           </Link>
         )}

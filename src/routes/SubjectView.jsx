@@ -6,6 +6,7 @@ import Breadcrumb from '../components/Breadcrumb.jsx';
 import BlockRow from '../components/BlockRow.jsx';
 import ProgressBar from '../components/ProgressBar.jsx';
 import SubjectDot from '../components/SubjectDot.jsx';
+import ColorPicker from '../components/ColorPicker.jsx';
 import Sheet from '../components/Sheet.jsx';
 import NotFound from './NotFound.jsx';
 import { activityAlpha } from '../lib/color.js';
@@ -51,13 +52,13 @@ export default function SubjectView() {
       <Breadcrumb items={[{ label: '홈', to: '/' }, { label: subject.name || '(이름 없음)' }]} />
 
       <div className="subjecthead">
-        <SubjectDot hue={subject.colorHue} alpha={alpha} size={14} />
+        <SubjectDot subject={subject} alpha={alpha} size={14} />
         <h1 className="page__title">{subject.name || '(이름 없음)'}</h1>
       </div>
 
       <ProgressBar
         percent={progress.percent}
-        hue={subject.colorHue}
+        subject={subject}
         alpha={alpha}
         label={`${subject.name} 진도율`}
       />
@@ -202,6 +203,7 @@ export default function SubjectView() {
 function SubjectSettings({ open, subject, onClose, onSave, onRequestDelete }) {
   const [name, setName] = useState(subject.name);
   const [totalBlocks, setTotalBlocks] = useState(String(subject.totalBlocks ?? 0));
+  const [customColor, setCustomColor] = useState(subject.customColor ?? null);
 
   // 다시 열 때마다 현재 값으로 초기화한다.
   const [lastOpen, setLastOpen] = useState(open);
@@ -210,6 +212,7 @@ function SubjectSettings({ open, subject, onClose, onSave, onRequestDelete }) {
     if (open) {
       setName(subject.name);
       setTotalBlocks(String(subject.totalBlocks ?? 0));
+      setCustomColor(subject.customColor ?? null);
     }
   }
 
@@ -227,7 +230,7 @@ function SubjectSettings({ open, subject, onClose, onSave, onRequestDelete }) {
             type="button"
             className="btn btn--primary"
             disabled={!name.trim()}
-            onClick={() => onSave({ name, totalBlocks: Number(totalBlocks) || 0 })}
+            onClick={() => onSave({ name, totalBlocks: Number(totalBlocks) || 0, customColor })}
           >
             저장
           </button>
@@ -264,12 +267,11 @@ function SubjectSettings({ open, subject, onClose, onSave, onRequestDelete }) {
 
       <div className="field">
         <span className="field__label">색상</span>
-        <div className="row">
-          <SubjectDot hue={subject.colorHue} size={14} />
-          <span className="field__hint">
-            hue {Math.round(subject.colorHue)}° — 만든 순서대로 자동 배정되며 바뀌지 않습니다.
-          </span>
-        </div>
+        <ColorPicker
+          value={customColor}
+          autoHue={subject.colorHue}
+          onChange={setCustomColor}
+        />
       </div>
 
       <hr className="divider" />

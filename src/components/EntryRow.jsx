@@ -11,7 +11,7 @@ export default function EntryRow({ entry, to, subject, block, showDate = false }
   return (
     <Link to={to} className="card entryrow">
       <div className="entryrow__head">
-        {subject && <SubjectDot hue={subject.colorHue} size={8} />}
+        {subject && <SubjectDot subject={subject} size={8} />}
         <span className="card__title entryrow__title">{entryTitle(entry)}</span>
       </div>
 
