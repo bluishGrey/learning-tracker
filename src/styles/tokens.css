@@ -1,0 +1,92 @@
+/* 디자인 토큰 — 색·간격·타이포의 단일 출처 */
+
+:root {
+  color-scheme: light dark;
+
+  /* 표면 */
+  --bg: hsl(0 0% 99%);
+  --surface: hsl(0 0% 100%);
+  --surface-2: hsl(220 14% 96%);
+  --surface-3: hsl(220 13% 91%);
+  --border: hsl(220 13% 88%);
+  --border-strong: hsl(220 9% 78%);
+
+  /* 글자 */
+  --text: hsl(220 18% 12%);
+  --text-dim: hsl(220 9% 44%);
+  --text-faint: hsl(220 8% 60%);
+
+  /* 의미색 */
+  --accent: hsl(221 83% 53%);
+  --accent-soft: hsl(221 83% 96%);
+  --danger: hsl(0 72% 47%);
+  --danger-soft: hsl(0 80% 97%);
+  --warn: hsl(32 90% 44%);
+  --warn-soft: hsl(40 90% 95%);
+  --success: hsl(152 60% 36%);
+  --success-soft: hsl(150 60% 96%);
+
+  /*
+   * 과목 색 레이어의 바탕.
+   * 활성도 알파가 0이 되면 이 회색이 그대로 드러나 무채색이 된다.
+   * (채도를 낮추는 게 아니라 알파만 내린다 — README 의 색상 규칙 참고)
+   */
+  --inactive-gray: hsl(0 0% 72%);
+
+  /* 간격 */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 16px;
+
+  /* 터치 목표 최소 크기 — 안드로이드 크롬 기준 */
+  --tap: 44px;
+
+  --shadow-sm: 0 1px 2px hsl(220 20% 10% / 0.06);
+  --shadow: 0 2px 8px hsl(220 20% 10% / 0.08);
+  --shadow-lg: 0 8px 32px hsl(220 20% 10% / 0.18);
+
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Pretendard,
+    'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'Cascadia Mono', Consolas,
+    'D2Coding', monospace;
+
+  --header-h: 56px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: hsl(220 18% 10%);
+    --surface: hsl(220 16% 13%);
+    --surface-2: hsl(220 15% 17%);
+    --surface-3: hsl(220 14% 22%);
+    --border: hsl(220 12% 24%);
+    --border-strong: hsl(220 10% 36%);
+
+    --text: hsl(220 15% 93%);
+    --text-dim: hsl(220 9% 65%);
+    --text-faint: hsl(220 8% 50%);
+
+    --accent: hsl(217 91% 65%);
+    --accent-soft: hsl(221 60% 20%);
+    --danger: hsl(0 84% 68%);
+    --danger-soft: hsl(0 50% 20%);
+    --warn: hsl(38 92% 60%);
+    --warn-soft: hsl(38 50% 18%);
+    --success: hsl(152 55% 55%);
+    --success-soft: hsl(152 40% 18%);
+
+    /* 어두운 배경에서는 밝은 회색이 튀므로 한 단계 낮춘다 */
+    --inactive-gray: hsl(0 0% 38%);
+
+    --shadow-sm: 0 1px 2px hsl(0 0% 0% / 0.3);
+    --shadow: 0 2px 8px hsl(0 0% 0% / 0.4);
+    --shadow-lg: 0 8px 32px hsl(0 0% 0% / 0.6);
+  }
+}

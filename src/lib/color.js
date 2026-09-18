@@ -63,6 +63,21 @@ export function activityAlpha(daysSinceLastActivity, inactivityDays) {
 }
 
 /**
+ * 회색 배경판 + 색 레이어를 한 요소에 합성한 인라인 스타일.
+ *
+ * background-color 로 회색을 깔고, 그 위에 알파를 가진 단색 gradient 를 얹는다.
+ * alpha 가 0이 되면 아래 회색이 그대로 드러나 무채색이 된다 —
+ * 채도를 건드리지 않고 무채색을 만드는 방법이다.
+ */
+export function layeredBackground(hue, alpha = 1) {
+  const layer = subjectColor(hue, alpha);
+  return {
+    backgroundColor: 'var(--inactive-gray)',
+    backgroundImage: `linear-gradient(${layer}, ${layer})`,
+  };
+}
+
+/**
  * 간트 막대의 밀도 알파.
  * normalized 는 전체 과목 중 최대 밀도로 나눈 0~1 값.
  */
