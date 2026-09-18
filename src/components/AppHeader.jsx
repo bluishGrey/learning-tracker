@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useStore, useActions } from '../state/StoreContext.jsx';
 import { formatRelativeDay, toDateKey } from '../lib/date.js';
@@ -15,8 +15,27 @@ export default function AppHeader({ sidebarOpen, onToggleSidebar }) {
   const { exportStatus } = useStore();
   const actions = useActions();
   const fileRef = useRef(null);
+  const headerRef = useRef(null);
   const [pending, setPending] = useState(null);
   const [busy, setBusy] = useState(false);
+
+  /*
+   * 상단 바 높이를 재서 --appbar-h 에 넣는다.
+   * 사이드바와 알림이 이 값에 기대어 자리를 잡는데, 상태 문구가 두 줄로 접히거나
+   * safe-area 가 끼면 높이가 달라져서 고정값으로는 어긋난다.
+   */
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return undefined;
+
+    const apply = () =>
+      document.documentElement.style.setProperty('--appbar-h', `${el.offsetHeight}px`);
+
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const handleFile = async (event) => {
     const file = event.target.files?.[0];
@@ -35,7 +54,7 @@ export default function AppHeader({ sidebarOpen, onToggleSidebar }) {
 
   return (
     <>
-      <header className="appbar">
+      <header className="appbar" ref={headerRef}>
         <div className="appbar__inner">
           <div className="appbar__row">
             <button

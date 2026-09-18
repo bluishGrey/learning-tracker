@@ -1,9 +1,15 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useStore } from '../state/StoreContext.jsx';
-import { selectEntriesOfDate, selectSubjectsOnDate } from '../state/selectors.js';
+import {
+  selectEntriesOfDate,
+  selectSubjectsOnDate,
+  selectYearsWithEntries,
+} from '../state/selectors.js';
 import CalendarPanel from '../components/CalendarPanel.jsx';
 import SubjectDot from '../components/SubjectDot.jsx';
-import { todayKey, monthKeyOf, formatFullDate } from '../lib/date.js';
+import YearGantt from '../components/YearGantt.jsx';
+import { todayKey, monthKeyOf, formatFullDate, parseDateKey } from '../lib/date.js';
 
 /**
  * 홈 = 이번 달 캘린더.
@@ -20,6 +26,9 @@ export default function Home() {
 
   const todayEntries = selectEntriesOfDate(index, today);
   const todaySubjects = selectSubjectsOnDate(state, index, today);
+
+  const years = selectYearsWithEntries(state);
+  const [ganttYear, setGanttYear] = useState(() => parseDateKey(today).year);
 
   return (
     <main className="page">
@@ -48,6 +57,29 @@ export default function Home() {
       </div>
 
       <CalendarPanel monthKey={monthKeyOf(today)} />
+
+      {years.length > 0 && (
+        <section className="section">
+          <div className="section__head">
+            <h2 className="section__title">연간 활동</h2>
+            {years.length > 1 && (
+              <select
+                className="select select--inline"
+                value={ganttYear}
+                onChange={(e) => setGanttYear(Number(e.target.value))}
+                aria-label="연도 선택"
+              >
+                {years.map((y) => (
+                  <option key={y} value={y}>
+                    {y}년
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+          <YearGantt year={ganttYear} />
+        </section>
+      )}
 
       {state.subjectOrder.length === 0 && (
         <div className="section">

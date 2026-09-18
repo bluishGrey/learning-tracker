@@ -54,17 +54,70 @@
 
 /* ─── 알림 ─────────────────────────────────────────────── */
 
+/*
+ * 알림은 레이아웃 흐름 밖에 떠 있는다.
+ * 흐름 안에 두면 알림이 뜰 때마다 본문이 아래로 밀려 읽던 자리를 잃는다.
+ * 시트(50)·백드롭(55)·사이드바(60)보다 위에 둬서, 대화상자에서 난 오류도 보이게 한다.
+ */
+.notice-layer {
+  position: fixed;
+  z-index: 70;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  padding: 0 var(--sp-4);
+  pointer-events: none;
+}
+
 .notice {
   display: flex;
   align-items: flex-start;
   gap: var(--sp-2);
-  max-width: 720px;
-  margin: var(--sp-3) auto 0;
+  width: min(560px, 100%);
   padding: var(--sp-3);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   font-size: 0.85rem;
-  width: calc(100% - var(--sp-4) * 2);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  pointer-events: auto;
+  animation: notice-in 0.18s ease-out;
+}
+
+@keyframes notice-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+/* 넓은 화면: 상단 바 아래 가운데 */
+@media (min-width: 640px) {
+  .notice-layer {
+    top: calc(var(--appbar-h) + var(--sp-2));
+  }
+}
+
+/*
+ * 좁은 화면: 아래쪽.
+ * 상태 문구가 두 줄로 접히면 상단 바 높이가 달라져서, 위에 붙이면 겹칠 수 있다.
+ */
+@media (max-width: 639px) {
+  .notice-layer {
+    bottom: calc(env(safe-area-inset-bottom) + var(--sp-3));
+  }
+
+  .notice {
+    animation-name: notice-in-up;
+  }
+}
+
+@keyframes notice-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
 }
 
 .notice--error {
@@ -901,7 +954,11 @@
 /* ═══ 사이드바 · 앱 껍데기 ═══════════════════════════════ */
 
 :root {
-  /* 사이드바를 상단 바 아래에 고정하기 위한 높이 (한 줄짜리 상태 문구 기준) */
+  /*
+   * 상단 바 높이. 사이드바와 알림이 이 값에 기대어 자리를 잡는다.
+   * 실제 값은 AppHeader 가 ResizeObserver 로 재서 덮어쓴다 — 상태 문구가 두 줄로
+   * 접히거나 safe-area 가 끼면 높이가 달라지기 때문이다. 아래는 첫 페인트용 근삿값.
+   */
   --appbar-h: 76px;
 }
 
@@ -1309,4 +1366,121 @@
 .svg-embed--loading {
   color: var(--text-faint);
   font-size: 0.82rem;
+}
+
+/* ═══ 연간 활동 간트 ═══════════════════════════════════════ */
+
+/*
+ * 장식·조망용이라 어떤 요소도 클릭을 받지 않는다.
+ * 라벨 칸 폭은 모든 행이 같아야 막대의 시작점이 한 줄로 정렬된다.
+ */
+.gantt {
+  --gantt-label-w: 96px;
+  --gantt-bar-h: 10px;
+  pointer-events: none;
+  user-select: none;
+}
+
+.gantt__months,
+.gantt__row {
+  display: grid;
+  grid-template-columns: var(--gantt-label-w) 1fr;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.gantt__row {
+  min-height: 24px;
+}
+
+.gantt__label {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  font-size: 0.78rem;
+}
+
+.gantt__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gantt__track {
+  position: relative;
+  height: var(--gantt-bar-h);
+  background: var(--surface-2);
+  border-radius: 3px;
+}
+
+.gantt__track--head {
+  height: 16px;
+  background: none;
+}
+
+/* 월 눈금 — 달마다 길이가 달라서 균등 분할이 아니라 실제 날짜 비율로 찍는다 */
+.gantt__month {
+  position: absolute;
+  top: 0;
+  font-size: 0.62rem;
+  color: var(--text-faint);
+  transform: translateX(-50%);
+  line-height: 1;
+}
+
+.gantt__tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border);
+}
+
+.gantt__today {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--accent);
+  opacity: 0.8;
+}
+
+.gantt__bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 3px;
+  border-radius: 3px;
+}
+
+.gantt__caption {
+  margin-top: var(--sp-3);
+  font-size: 0.72rem;
+  color: var(--text-faint);
+}
+
+.gantt__empty {
+  font-size: 0.85rem;
+  color: var(--text-faint);
+  padding: var(--sp-3) 0;
+}
+
+/* 좁은 화면에서는 라벨 칸을 줄이고 월 표시를 격월로 솎는다 */
+@media (max-width: 480px) {
+  .gantt {
+    --gantt-label-w: 72px;
+  }
+
+  .gantt__month:nth-child(even) {
+    display: none;
+  }
+}
+
+/* 섹션 머리에 들어가는 작은 선택 상자 */
+.select--inline {
+  width: auto;
+  min-height: 32px;
+  padding: 0 var(--sp-2);
+  font-size: 0.8rem;
 }

@@ -6,6 +6,8 @@ import Breadcrumb from '../components/Breadcrumb.jsx';
 import EntryRow from '../components/EntryRow.jsx';
 import Sheet from '../components/Sheet.jsx';
 import NotFound from './NotFound.jsx';
+import { copyText } from '../lib/clipboard.js';
+import { buildBlockExportText, summarizeBlockExport } from '../lib/exportBlock.js';
 
 /** 경로 B의 세 번째 단계 — 블록에 속한 기록 (날짜순) */
 export default function BlockView() {
@@ -17,6 +19,8 @@ export default function BlockView() {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // 클립보드가 막힌 환경(file:// 등)에서 직접 복사할 수 있도록 원문을 띄운다
+  const [manualCopy, setManualCopy] = useState(null);
 
   const subject = state.subjects[subjectId];
   const block = state.blocks[blockId];
@@ -29,6 +33,22 @@ export default function BlockView() {
   const openEditor = () => {
     setName(block.name);
     setEditing(true);
+  };
+
+  const handleExport = async () => {
+    if (entries.length === 0) return;
+    const text = buildBlockExportText(entries);
+    const result = await copyText(text);
+
+    if (result.ok) {
+      actions.setNotice({
+        level: 'success',
+        message: `${block.name} — ${summarizeBlockExport(entries)}를 클립보드에 복사했습니다.`,
+      });
+    } else {
+      // 조용히 실패하지 않는다. 직접 복사할 수 있게 원문을 보여준다.
+      setManualCopy(text);
+    }
   };
 
   return (
@@ -55,6 +75,15 @@ export default function BlockView() {
           aria-pressed={block.isCompleted}
         >
           {block.isCompleted ? '✓ 완료됨 — 해제' : '완료로 표시'}
+        </button>
+        <button
+          type="button"
+          className="btn"
+          onClick={handleExport}
+          disabled={entries.length === 0}
+          title={entries.length === 0 ? '내보낼 기록이 없습니다' : undefined}
+        >
+          ⧉ 내보내기
         </button>
         <button type="button" className="btn" onClick={openEditor}>
           블록 설정
@@ -166,6 +195,34 @@ export default function BlockView() {
           <strong>이 블록의 기록 {entries.length}개가 함께 삭제됩니다.</strong>
           <p>되돌릴 수 없습니다. 필요하면 먼저 내보내기로 백업하세요.</p>
         </div>
+      </Sheet>
+
+      {/* 클립보드가 막힌 경우의 수동 복사 */}
+      <Sheet
+        open={manualCopy !== null}
+        title="직접 복사해 주세요"
+        onClose={() => setManualCopy(null)}
+        footer={
+          <button
+            type="button"
+            className="btn btn--primary btn--block"
+            onClick={() => setManualCopy(null)}
+          >
+            닫기
+          </button>
+        }
+      >
+        <div className="callout callout--warn">
+          브라우저가 클립보드 접근을 막았습니다. (파일을 직접 열었거나 권한이 거부된 경우)
+          아래 내용을 전체 선택해 복사하세요.
+        </div>
+        <textarea
+          className="textarea textarea--code"
+          readOnly
+          value={manualCopy ?? ''}
+          onFocus={(e) => e.target.select()}
+          style={{ minHeight: '220px' }}
+        />
       </Sheet>
     </main>
   );
