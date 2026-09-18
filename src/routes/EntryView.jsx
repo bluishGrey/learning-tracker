@@ -4,6 +4,7 @@ import { useStore, useActions } from '../state/StoreContext.jsx';
 import { selectEntryContext } from '../state/selectors.js';
 import Breadcrumb from '../components/Breadcrumb.jsx';
 import Markdown from '../components/Markdown.jsx';
+import DiagramEmbed from '../components/DiagramEmbed.jsx';
 import SvgEmbed from '../components/SvgEmbed.jsx';
 import SubjectDot from '../components/SubjectDot.jsx';
 import Sheet from '../components/Sheet.jsx';
@@ -93,6 +94,13 @@ export default function EntryView() {
         </Link>
       </div>
 
+      {entry.progressPercent != null && (
+        <p className="page__sub entryview__progress">
+          이 시점 진행률 <strong>{entry.progressPercent}%</strong>
+          <span className="field__hint"> — 블록 상세의 추이 그래프에 찍힙니다</span>
+        </p>
+      )}
+
       {entry.tags?.length > 0 && (
         <div className="tag-list entryview__tags">
           {entry.tags.map((tag) => (
@@ -110,6 +118,14 @@ export default function EntryView() {
           <p className="page__sub">내용이 비어 있습니다.</p>
         )}
       </article>
+
+      {/* 다이어그램이 위, SVG 가 아래 — 블록 상세와 같은 순서로 둔다 */}
+      {entry.diagramCode && (
+        <section className="section">
+          <h2 className="section__title">다이어그램</h2>
+          <DiagramEmbed code={entry.diagramCode} />
+        </section>
+      )}
 
       {entry.svgCode && (
         <section className="section">

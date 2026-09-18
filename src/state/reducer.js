@@ -13,6 +13,8 @@ import {
   normalizeTags,
   normalizeTitle,
   normalizeSvg,
+  normalizeDiagram,
+  normalizePercent,
   normalizeCustomColor,
   toNonNegativeInt,
   createInitialState,
@@ -30,6 +32,7 @@ export const ACTIONS = {
   BLOCK_TOGGLE: 'block/toggle',
   BLOCK_REMOVE: 'block/remove',
   BLOCK_REORDER: 'block/reorder',
+  BLOCK_MOVE: 'block/move',
 
   ENTRY_ADD: 'entry/add',
   ENTRY_UPDATE: 'entry/update',
@@ -125,11 +128,8 @@ export function reducer(state, action) {
 
     // ─── Block ─────────────────────────────────────────────
     case ACTIONS.BLOCK_ADD: {
-      const { id, subjectId, name } = action;
+      const { id, subjectId, name, description, progressPercent, diagramCode, svgCode } = action;
       if (!state.subjects[subjectId]) return state;
-
-      const siblings = Object.values(state.blocks).filter((b) => b.subjectId === subjectId);
-      const nextOrder = siblings.reduce((max, b) => Math.max(max, Number(b.order) || 0), -1) + 1;
 
       const at = nowIso();
       return touch({
@@ -141,7 +141,11 @@ export function reducer(state, action) {
             subjectId,
             name: String(name ?? '').trim(),
             isCompleted: false,
-            order: nextOrder,
+            order: nextBlockOrder(state, subjectId),
+            description: String(description ?? ''),
+            progressPercent: normalizePercent(progressPercent),
+            diagramCode: normalizeDiagram(diagramCode),
+            svgCode: normalizeSvg(svgCode),
             createdAt: at,
             updatedAt: at,
           },
@@ -152,11 +156,17 @@ export function reducer(state, action) {
     case ACTIONS.BLOCK_UPDATE: {
       const current = state.blocks[action.id];
       if (!current) return state;
+
+      const p = action.patch;
       const patch = {};
-      if (action.patch.name !== undefined) patch.name = String(action.patch.name).trim();
-      if (action.patch.isCompleted !== undefined) {
-        patch.isCompleted = Boolean(action.patch.isCompleted);
-      }
+      if (p.name !== undefined) patch.name = String(p.name).trim();
+      if (p.isCompleted !== undefined) patch.isCompleted = Boolean(p.isCompleted);
+      if (p.description !== undefined) patch.description = String(p.description);
+      // null 을 넘기면 '미설정'으로 되돌아간다 (0% 와는 다른 상태다)
+      if (p.progressPercent !== undefined) patch.progressPercent = normalizePercent(p.progressPercent);
+      if (p.diagramCode !== undefined) patch.diagramCode = normalizeDiagram(p.diagramCode);
+      if (p.svgCode !== undefined) patch.svgCode = normalizeSvg(p.svgCode);
+
       return touch({
         ...state,
         blocks: { ...state.blocks, [action.id]: { ...current, ...patch, updatedAt: nowIso() } },
@@ -189,6 +199,33 @@ export function reducer(state, action) {
       });
     }
 
+    /**
+     * 블록을 다른 과목으로 옮긴다.
+     *
+     * 소속 Entry 는 blockId 로만 블록에 매달려 있어 함께 따라온다 (건드릴 필요가 없다).
+     * order 는 옮겨간 과목의 맨 뒤로 새로 받는다 — 원래 과목에서의 순번을 그대로
+     * 들고 가면 이미 그 번호를 쓰는 블록과 겹쳐 목록 순서가 흔들린다.
+     */
+    case ACTIONS.BLOCK_MOVE: {
+      const current = state.blocks[action.id];
+      if (!current) return state;
+      if (!state.subjects[action.subjectId]) return state;
+      if (current.subjectId === action.subjectId) return state;
+
+      return touch({
+        ...state,
+        blocks: {
+          ...state.blocks,
+          [action.id]: {
+            ...current,
+            subjectId: action.subjectId,
+            order: nextBlockOrder(state, action.subjectId),
+            updatedAt: nowIso(),
+          },
+        },
+      });
+    }
+
     case ACTIONS.BLOCK_REORDER: {
       const at = nowIso();
       const blocks = { ...state.blocks };
@@ -203,7 +240,8 @@ export function reducer(state, action) {
 
     // ─── Entry ─────────────────────────────────────────────
     case ACTIONS.ENTRY_ADD: {
-      const { id, blockId, date, tags, content, svgCode, title } = action;
+      const { id, blockId, date, tags, content, diagramCode, svgCode, title, progressPercent } =
+        action;
       if (!state.blocks[blockId]) return state;
 
       const at = nowIso();
@@ -218,7 +256,9 @@ export function reducer(state, action) {
             title: normalizeTitle(title),
             tags: normalizeTags(tags),
             content: String(content ?? ''),
+            diagramCode: normalizeDiagram(diagramCode),
             svgCode: normalizeSvg(svgCode),
+            progressPercent: normalizePercent(progressPercent),
             createdAt: at,
             updatedAt: at,
           },
@@ -236,7 +276,9 @@ export function reducer(state, action) {
       if (p.title !== undefined) patch.title = normalizeTitle(p.title);
       if (p.tags !== undefined) patch.tags = normalizeTags(p.tags);
       if (p.content !== undefined) patch.content = String(p.content);
+      if (p.diagramCode !== undefined) patch.diagramCode = normalizeDiagram(p.diagramCode);
       if (p.svgCode !== undefined) patch.svgCode = normalizeSvg(p.svgCode);
+      if (p.progressPercent !== undefined) patch.progressPercent = normalizePercent(p.progressPercent);
       if (p.blockId !== undefined && state.blocks[p.blockId]) patch.blockId = p.blockId;
 
       return touch({
@@ -292,6 +334,18 @@ export function reducer(state, action) {
 /** 데이터가 바뀐 시각을 남긴다 — '내보내기 필요' 배너의 근거가 된다. */
 function touch(state) {
   return { ...state, settings: { ...state.settings, lastChangeAt: nowIso() } };
+}
+
+/**
+ * 과목 안에서 다음 블록이 받을 order.
+ * 추가·이동 두 곳에서 같은 규칙을 써야 하므로 함수로 뽑았다.
+ */
+function nextBlockOrder(state, subjectId) {
+  return (
+    Object.values(state.blocks)
+      .filter((b) => b.subjectId === subjectId)
+      .reduce((max, b) => Math.max(max, Number(b.order) || 0), -1) + 1
+  );
 }
 
 function omit(obj, key) {

@@ -145,6 +145,150 @@ export function selectBlockEntries(index, blockId) {
   return index.entriesByBlock.get(blockId) ?? [];
 }
 
+/**
+ * 과목 전체의 기록을 최신순으로. 과목 상세의 '소속 기록 요약' 목록에 쓴다.
+ *
+ * 블록 화면을 하나씩 열어보지 않고도 "이 과목에서 최근에 뭘 했나"를 알 수 있어야
+ * 하는데, 인덱스는 블록별로만 묶여 있어 여기서 한 번 합친다.
+ * 각 기록에 소속 블록을 함께 실어 보낸다 — 목록에서 바로 경로를 만들 수 있어야 한다.
+ */
+export function selectSubjectEntries(index, subjectId, limit = Infinity) {
+  const rows = [];
+  for (const block of index.blocksBySubject.get(subjectId) ?? []) {
+    for (const entry of index.entriesByBlock.get(block.id) ?? []) {
+      rows.push({ entry, block });
+    }
+  }
+  rows.sort((a, b) => byDateThenCreated(b.entry, a.entry));
+  return { total: rows.length, rows: Number.isFinite(limit) ? rows.slice(0, limit) : rows };
+}
+
+// ─── Block 자체 정보 ───────────────────────────────────────
+
+/**
+ * Block 의 대표 진행률.
+ *
+ * 트래커는 이 값을 계산하지 않는다. claude.ai 가 계산해 보내준 값을 그대로
+ * 보관하고 있을 뿐이라, 화면에 그릴 때만 0~100 으로 물려서 쓴다.
+ * (과목 진도율처럼 '완료 블록 ÷ 목표'로 유도되는 값이 아니다)
+ */
+export function selectBlockProgress(block) {
+  const raw = block?.progressPercent;
+  if (raw == null) return { hasValue: false, percent: 0 };
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return { hasValue: false, percent: 0 };
+  return { hasValue: true, percent: Math.min(100, Math.max(0, Math.round(n))) };
+}
+
+/**
+ * 블록 안의 진행률 추이 — 진행률이 적힌 기록만 날짜순으로 뽑는다.
+ *
+ * Block.progressPercent(대표값)와 달리 이쪽은 Entry.progressPercent 를 모은 것이다.
+ * 진행률이 비어 있는 기록은 건너뛴다. 0 으로 채워 이어 붙이면 "그날 진도가
+ * 0으로 떨어졌다"는 거짓말이 되기 때문이다.
+ */
+export function selectBlockTrend(index, blockId) {
+  const points = [];
+  for (const entry of index.entriesByBlock.get(blockId) ?? []) {
+    const p = Number(entry.progressPercent);
+    if (entry.progressPercent == null || !Number.isFinite(p)) continue;
+    points.push({
+      entryId: entry.id,
+      date: entry.date,
+      percent: Math.min(100, Math.max(0, Math.round(p))),
+    });
+  }
+  return points;
+}
+
+// ─── 검색 ─────────────────────────────────────────────────
+
+/** 종류별 최대 결과 수 — 사이드바에 수백 줄이 쏟아지지 않게 */
+export const SEARCH_LIMIT = 20;
+
+/**
+ * 과목·블록·기록을 한 번에 훑는다.
+ *
+ * 저장은 평면 맵이라 세 종류를 각각 돌면 되고, 계층 문맥(과목/블록)은
+ * 결과에 함께 실어 보낸다 — "Week 5"라는 블록이 어느 과목의 것인지 보이지
+ * 않으면 검색 결과가 무의미해지기 때문이다.
+ *
+ * 대소문자를 구분하지 않고 부분 일치로 찾는다. 기록은 제목과 내용을 모두 보되,
+ * 내용에서 걸린 경우에는 걸린 자리 주변을 잘라 미리보기로 돌려준다.
+ */
+export function selectSearch(state, index, rawQuery, limit = SEARCH_LIMIT) {
+  const query = String(rawQuery ?? '').trim();
+  if (query.length === 0) {
+    return { query: '', isEmpty: true, total: 0, subjects: [], blocks: [], entries: [] };
+  }
+
+  const needle = query.toLowerCase();
+  const hit = (text) => typeof text === 'string' && text.toLowerCase().includes(needle);
+
+  const subjects = [];
+  const blocks = [];
+  const entries = [];
+
+  for (const id of state.subjectOrder) {
+    const subject = state.subjects[id];
+    if (!subject) continue;
+
+    if (hit(subject.name)) subjects.push({ subject });
+
+    for (const block of index.blocksBySubject.get(id) ?? []) {
+      if (hit(block.name) || hit(block.description)) {
+        blocks.push({
+          block,
+          subject,
+          // 이름이 아니라 설명에서 걸렸으면 어디서 걸렸는지 보여준다
+          snippet: hit(block.name) ? null : snippetAround(block.description, needle),
+        });
+      }
+
+      for (const entry of index.entriesByBlock.get(block.id) ?? []) {
+        const inTitle = hit(entry.title);
+        const inContent = hit(entry.content);
+        const inTags = (entry.tags ?? []).some(hit);
+        if (!inTitle && !inContent && !inTags) continue;
+        entries.push({
+          entry,
+          block,
+          subject,
+          snippet: inContent ? snippetAround(entry.content, needle) : null,
+        });
+      }
+    }
+  }
+
+  // 기록은 최신순이 유용하다 (과목·블록은 트리 순서를 유지한다)
+  entries.sort((a, b) => byDateThenCreated(b.entry, a.entry));
+
+  const total = subjects.length + blocks.length + entries.length;
+  return {
+    query,
+    isEmpty: false,
+    total,
+    truncated: total > limit * 3,
+    subjects: subjects.slice(0, limit),
+    blocks: blocks.slice(0, limit),
+    entries: entries.slice(0, limit),
+  };
+}
+
+/** 검색어 주변 ±40자. 줄바꿈은 공백으로 눕혀 한 줄로 보여준다. */
+const SNIPPET_PAD = 40;
+
+function snippetAround(text, needle) {
+  if (typeof text !== 'string') return null;
+  const flat = text.replace(/\s+/g, ' ').trim();
+  const at = flat.toLowerCase().indexOf(needle);
+  if (at < 0) return flat.slice(0, SNIPPET_PAD * 2) || null;
+
+  const from = Math.max(0, at - SNIPPET_PAD);
+  const to = Math.min(flat.length, at + needle.length + SNIPPET_PAD);
+  return `${from > 0 ? '…' : ''}${flat.slice(from, to)}${to < flat.length ? '…' : ''}`;
+}
+
 // ─── 캘린더 ────────────────────────────────────────────────
 
 export function selectEntriesOfDate(index, dateKey) {

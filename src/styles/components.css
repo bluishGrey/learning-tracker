@@ -1484,3 +1484,301 @@
   padding: 0 var(--sp-2);
   font-size: 0.8rem;
 }
+
+/* ═══ 다이어그램 · SVG 뷰어 보강 ═══════════════════════════ */
+
+/*
+ * mermaid 가 그린 그림은 가운데로 모은다. 왼쪽에 붙여 두면 폭이 좁은 도형에서
+ * 카드 오른쪽이 텅 빈 채로 남는다.
+ */
+.diagram-embed {
+  display: flex;
+  justify-content: center;
+}
+
+.diagram-embed svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.svg-embed--invalid {
+  border-style: dashed;
+}
+
+.svg-embed__detail {
+  margin-top: var(--sp-2);
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.svg-embed__detail summary {
+  cursor: pointer;
+  color: var(--text-faint);
+}
+
+.svg-embed__detail pre {
+  margin: var(--sp-2) 0 0;
+  padding: var(--sp-2);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 그려지긴 하지만 짚어줄 문제 — 오류(빨강)와 구별되게 노랑 쪽으로 */
+.svg-embed__warnings {
+  margin: var(--sp-2) 0 0;
+  padding-left: 1.1em;
+  color: var(--warn);
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+
+/* ═══ 진행률 추이 ═══════════════════════════════════════════ */
+
+.trend {
+  margin: 0;
+}
+
+.trend__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--sp-2);
+}
+
+/* 눈금은 데이터보다 뒤로 물러나 있어야 한다 — 실선 1px, 한 단계 낮은 회색 */
+.trend__grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.trend__tick {
+  fill: var(--text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 표면색 링이 있어야 점이 선·다른 점과 겹쳐도 구분된다 */
+.trend__dot {
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+/* 값 글자는 계열 색이 아니라 본문 글자색을 쓴다 (옅은 색은 글자로 읽히지 않는다) */
+.trend__value {
+  fill: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.trend__caption {
+  margin-top: var(--sp-2);
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+
+/* ═══ 붙여넣기 가져오기 ═══════════════════════════════════ */
+
+.paste__input {
+  min-height: 200px;
+  font-size: 0.82rem;
+}
+
+.paste__result {
+  margin-top: var(--sp-3);
+}
+
+.paste__errors {
+  margin: var(--sp-2) 0 0;
+  padding-left: 1.1em;
+  line-height: 1.7;
+}
+
+.paste__preview {
+  margin: var(--sp-2) 0 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.paste__previewrow {
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: 0.82rem;
+  border-top: 1px solid var(--border);
+}
+
+.paste__previewrow:first-child {
+  border-top: none;
+}
+
+.paste__previewrow dt {
+  flex: 0 0 5.5em;
+  color: var(--text-faint);
+}
+
+.paste__previewrow dd {
+  margin: 0;
+  color: var(--text-dim);
+  word-break: break-word;
+}
+
+/* ═══ 사이드바 검색 ═══════════════════════════════════════ */
+
+.sidebar__search {
+  position: relative;
+  padding: var(--sp-2) 0 var(--sp-3);
+}
+
+.input--sm {
+  min-height: 36px;
+  font-size: 0.85rem;
+}
+
+/* 검색어가 있을 때만 나타나는 지우기 버튼 */
+.sidebar__searchclear {
+  position: absolute;
+  right: var(--sp-2);
+  top: calc(var(--sp-2) + 6px);
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface-3);
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.searchresults__count {
+  margin: 0 var(--sp-2) var(--sp-2);
+  font-size: 0.75rem;
+  color: var(--text-faint);
+}
+
+.searchresults__group {
+  margin-bottom: var(--sp-3);
+}
+
+.searchresults__grouptitle {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-1);
+  padding: 0 var(--sp-2);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.searchresults__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.searchresults__row {
+  display: block;
+  padding: var(--sp-2);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.searchresults__row:hover {
+  background: var(--surface-2);
+}
+
+.searchresults__title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
+.searchresults__path,
+.searchresults__snippet {
+  display: block;
+  font-size: 0.74rem;
+  color: var(--text-faint);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.searchresults__snippet {
+  color: var(--text-dim);
+}
+
+.searchresults__more {
+  margin: 0 var(--sp-2);
+  font-size: 0.74rem;
+  color: var(--text-faint);
+  line-height: 1.6;
+}
+
+/* ═══ 블록 상세 보강 ═══════════════════════════════════════ */
+
+.blockhead__progress {
+  margin-bottom: var(--sp-3);
+}
+
+.blockdesc {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface);
+}
+
+/*
+ * 아직 채우지 않은 자리 안내. 기록이 없을 때의 .empty 만큼 자리를 차지하면
+ * 매번 눈에 걸리므로, 테두리 없이 한 줄로만 남긴다.
+ */
+.empty--quiet {
+  border: none;
+  padding: var(--sp-3) 0;
+  text-align: left;
+  font-size: 0.82rem;
+  color: var(--text-faint);
+  line-height: 1.7;
+}
+
+.section__note {
+  font-size: 0.75rem;
+  color: var(--text-faint);
+}
+
+.editor__import {
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-4);
+}
+
+.editor__importhint {
+  flex: 1 1 14em;
+  line-height: 1.6;
+}
+
+/* 진행률 배지는 다른 배지와 달리 값이므로 살짝 강조한다 */
+.entryrow__badge--progress {
+  background: var(--accent-soft);
+  color: var(--accent-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.entryview__progress {
+  margin-top: var(--sp-2);
+}

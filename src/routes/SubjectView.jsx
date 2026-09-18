@@ -1,9 +1,15 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useStore, useActions } from '../state/StoreContext.jsx';
-import { selectBlocks, selectProgress, selectDaysSinceActive } from '../state/selectors.js';
+import {
+  selectBlocks,
+  selectProgress,
+  selectDaysSinceActive,
+  selectSubjectEntries,
+} from '../state/selectors.js';
 import Breadcrumb from '../components/Breadcrumb.jsx';
 import BlockRow from '../components/BlockRow.jsx';
+import EntryRow from '../components/EntryRow.jsx';
 import ProgressBar from '../components/ProgressBar.jsx';
 import SubjectDot from '../components/SubjectDot.jsx';
 import ColorPicker from '../components/ColorPicker.jsx';
@@ -12,7 +18,10 @@ import NotFound from './NotFound.jsx';
 import { activityAlpha } from '../lib/color.js';
 import { formatRelativeDay } from '../lib/date.js';
 
-/** 경로 B의 두 번째 단계 — 그 과목의 블록 목록 */
+/** 과목 상세에 함께 보여줄 최근 기록 수 — 목록 화면이 되지 않을 만큼만 */
+const RECENT_LIMIT = 8;
+
+/** 경로 B의 두 번째 단계 — 그 과목의 블록 목록과 최근 기록 */
 export default function SubjectView() {
   const { subjectId } = useParams();
   const { state, index } = useStore();
@@ -33,10 +42,9 @@ export default function SubjectView() {
   const alpha = activityAlpha(daysSince, state.settings.inactivityDays);
   const lastActive = index.lastActiveBySubject.get(subjectId) ?? null;
 
-  const entryTotal = blocks.reduce(
-    (sum, b) => sum + (index.entriesByBlock.get(b.id)?.length ?? 0),
-    0
-  );
+  // 이 과목의 기록을 블록 경계 없이 최신순으로 — "요즘 뭘 했나"를 한 번에 본다
+  const recent = selectSubjectEntries(index, subjectId, RECENT_LIMIT);
+  const entryTotal = recent.total;
 
   const submitBlock = (event) => {
     event.preventDefault();
@@ -105,6 +113,32 @@ export default function SubjectView() {
                   to={`/subjects/${subjectId}/${block.id}`}
                   entryCount={index.entriesByBlock.get(block.id)?.length ?? 0}
                   onToggle={() => actions.toggleBlock(block.id)}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="section">
+        <div className="section__head">
+          <h2 className="section__title">최근 기록</h2>
+          {entryTotal > RECENT_LIMIT && (
+            <span className="section__note">전체 {entryTotal}개 중 {RECENT_LIMIT}개</span>
+          )}
+        </div>
+
+        {recent.rows.length === 0 ? (
+          <div className="empty">아직 이 과목에 기록이 없습니다.</div>
+        ) : (
+          <ul className="stack">
+            {recent.rows.map(({ entry, block }) => (
+              <li key={entry.id}>
+                <EntryRow
+                  entry={entry}
+                  block={block}
+                  showDate
+                  to={`/subjects/${subjectId}/${block.id}/e/${entry.id}`}
                 />
               </li>
             ))}

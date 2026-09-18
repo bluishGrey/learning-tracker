@@ -13,13 +13,24 @@
  *   태그
  *   내용
  *
+ *   --- 참고 다이어그램 ---
+ *   (diagramCode 가 있는 기록들을 날짜순으로 나열)
+ *
  *   --- 참고 SVG ---
  *   (svgCode 가 있는 기록들을 날짜순으로 나열)
  *
  * 태그가 없는 기록은 태그 줄을 아예 비운다. 빈 줄을 남기면 붙여넣었을 때
  * 기록 사이의 구분이 흐려진다.
+ *
+ * 그림 두 종류를 본문이 아니라 뒤쪽 구획으로 몰아 두는 이유: 코드가 길어서
+ * 기록 사이사이에 끼면 "무슨 공부를 했는지"의 흐름이 끊긴다.
+ * 해당 코드가 있는 기록이 하나도 없으면 그 구획 자체를 만들지 않는다.
+ *
+ * 이 형식은 claude.ai 에 붙여넣는 **입력**이다. 돌려받는 답은
+ * lib/structuredText.js 의 ---ENTRY--- 형식으로 가져온다.
  */
 
+export const DIAGRAM_SECTION_HEADER = '--- 참고 다이어그램 ---';
 export const SVG_SECTION_HEADER = '--- 참고 SVG ---';
 
 export function buildBlockExportText(entries) {
@@ -30,22 +41,40 @@ export function buildBlockExportText(entries) {
     return lines.join('\n').trimEnd();
   });
 
-  const withSvg = entries.filter((entry) => entry.svgCode?.trim());
-
   let text = blocks.join('\n\n');
-
-  if (withSvg.length > 0) {
-    const svgParts = withSvg.map((entry) => `${entry.date}\n${entry.svgCode.trim()}`);
-    text += `\n\n${SVG_SECTION_HEADER}\n${svgParts.join('\n\n')}`;
-  }
+  text += section(entries, 'diagramCode', DIAGRAM_SECTION_HEADER, true);
+  text += section(entries, 'svgCode', SVG_SECTION_HEADER, false);
 
   return `${text}\n`;
 }
 
+/**
+ * 그림 구획 하나. 다이어그램은 코드펜스로 감싼다 —
+ * claude.ai 가 어느 문법으로 읽어야 하는지 바로 알아보게 하기 위함이다.
+ */
+function section(entries, field, header, fenced) {
+  const rows = entries.filter((entry) => entry[field]?.trim());
+  if (rows.length === 0) return '';
+
+  const parts = rows.map((entry) => {
+    const code = entry[field].trim();
+    return fenced
+      ? `${entry.date}\n\`\`\`mermaid\n${code}\n\`\`\``
+      : `${entry.date}\n${code}`;
+  });
+
+  return `\n\n${header}\n${parts.join('\n\n')}`;
+}
+
 /** 복사 결과 안내 문구용 요약 */
 export function summarizeBlockExport(entries) {
-  const svgCount = entries.filter((entry) => entry.svgCode?.trim()).length;
-  return svgCount > 0
-    ? `기록 ${entries.length}개 (SVG ${svgCount}개 포함)`
+  const counts = [];
+  const diagrams = entries.filter((entry) => entry.diagramCode?.trim()).length;
+  const svgs = entries.filter((entry) => entry.svgCode?.trim()).length;
+  if (diagrams > 0) counts.push(`다이어그램 ${diagrams}개`);
+  if (svgs > 0) counts.push(`SVG ${svgs}개`);
+
+  return counts.length > 0
+    ? `기록 ${entries.length}개 (${counts.join(', ')} 포함)`
     : `기록 ${entries.length}개`;
 }

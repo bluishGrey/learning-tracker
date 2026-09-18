@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, matchPath, useLocation } from 'react-router-dom';
 import { useStore } from '../state/StoreContext.jsx';
-import { selectBlocks, selectBlockEntries } from '../state/selectors.js';
+import { selectBlocks, selectBlockEntries, selectSearch, SEARCH_LIMIT } from '../state/selectors.js';
 import SubjectDot from './SubjectDot.jsx';
 import { entryTitle } from '../lib/entryTitle.js';
 import { todayKey, monthKeyOf, formatMonthDay } from '../lib/date.js';
@@ -14,11 +14,16 @@ import { todayKey, monthKeyOf, formatMonthDay } from '../lib/date.js';
  *
  * 캘린더는 트리에 넣지 않는다 — 시간축으로 보는 화면이라 계층 구조와 성격이 다르고,
  * 전용 화면을 그대로 둔다.
+ *
+ * 검색창은 트리를 걸러내지 않고 **트리 자리를 대신 차지한다.** 걸러낸 트리는
+ * 계층이 듬성듬성 남아 오히려 읽기 어렵고, 기록이 어느 블록 소속인지 보이지 않는다.
+ * 결과 목록에는 소속 경로를 문장으로 붙여 준다.
  */
 export default function Sidebar({ open, onNavigate }) {
   const { state, index } = useStore();
   const location = useLocation();
 
+  const [query, setQuery] = useState('');
   const [openSubjects, setOpenSubjects] = useState(() => new Set());
   const [openBlocks, setOpenBlocks] = useState(() => new Set());
 
@@ -71,6 +76,61 @@ export default function Sidebar({ open, onNavigate }) {
         </Link>
       </nav>
 
+      <div className="sidebar__search">
+        <input
+          type="search"
+          className="input input--sm"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="과목 · 블록 · 기록 검색"
+          aria-label="검색"
+        />
+        {query.trim() && (
+          <button
+            type="button"
+            className="sidebar__searchclear"
+            onClick={() => setQuery('')}
+            aria-label="검색어 지우기"
+          >
+            ×
+          </button>
+        )}
+      </div>
+
+      {query.trim() ? (
+        <SearchResults
+          results={selectSearch(state, index, query)}
+          onNavigate={onNavigate}
+        />
+      ) : (
+        <TreeSection
+          subjects={subjects}
+          index={index}
+          activeIds={activeIds}
+          openSubjects={openSubjects}
+          openBlocks={openBlocks}
+          toggleSubject={toggleSubject}
+          toggleBlock={toggleBlock}
+          onNavigate={onNavigate}
+        />
+      )}
+    </aside>
+  );
+}
+
+/** 과목 → 블록 → 기록 트리 */
+function TreeSection({
+  subjects,
+  index,
+  activeIds,
+  openSubjects,
+  openBlocks,
+  toggleSubject,
+  toggleBlock,
+  onNavigate,
+}) {
+  return (
+    <>
       <div className="sidebar__sectionhead">
         {/* 섹션 제목 자체가 과목 목록 전체 화면으로 가는 링크다 */}
         <Link to="/subjects" className="sidebar__sectiontitle" onClick={onNavigate}>
@@ -197,7 +257,106 @@ export default function Sidebar({ open, onNavigate }) {
           })}
         </ul>
       )}
-    </aside>
+    </>
+  );
+}
+
+/**
+ * 검색 결과.
+ *
+ * 종류별로 나눠 보여준다 — 섞어 놓으면 "과목을 찾는 중"인지 "그때 그 기록을
+ * 찾는 중"인지에 따라 눈이 가야 할 곳이 달라져서 매번 전체를 훑게 된다.
+ */
+function SearchResults({ results, onNavigate }) {
+  if (results.total === 0) {
+    return (
+      <p className="sidebar__empty">
+        &quot;{results.query}&quot; 와 맞는 것이 없습니다.
+        <br />
+        과목·블록 이름, 기록의 제목·내용·태그를 찾습니다.
+      </p>
+    );
+  }
+
+  return (
+    <div className="searchresults">
+      <p className="searchresults__count">{results.total}개 찾음</p>
+
+      {results.subjects.length > 0 && (
+        <SearchGroup title="과목" count={results.subjects.length}>
+          {results.subjects.map(({ subject }) => (
+            <li key={subject.id}>
+              <Link
+                to={`/subjects/${subject.id}`}
+                className="searchresults__row"
+                onClick={onNavigate}
+              >
+                <span className="searchresults__title">
+                  <SubjectDot subject={subject} size={9} />
+                  {subject.name || '(이름 없음)'}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </SearchGroup>
+      )}
+
+      {results.blocks.length > 0 && (
+        <SearchGroup title="블록" count={results.blocks.length}>
+          {results.blocks.map(({ block, subject, snippet }) => (
+            <li key={block.id}>
+              <Link
+                to={`/subjects/${subject.id}/${block.id}`}
+                className="searchresults__row"
+                onClick={onNavigate}
+              >
+                <span className="searchresults__title">{block.name || '(이름 없음)'}</span>
+                <span className="searchresults__path">{subject.name}</span>
+                {snippet && <span className="searchresults__snippet">{snippet}</span>}
+              </Link>
+            </li>
+          ))}
+        </SearchGroup>
+      )}
+
+      {results.entries.length > 0 && (
+        <SearchGroup title="기록" count={results.entries.length}>
+          {results.entries.map(({ entry, block, subject, snippet }) => (
+            <li key={entry.id}>
+              <Link
+                to={`/subjects/${subject.id}/${block.id}/e/${entry.id}`}
+                className="searchresults__row"
+                onClick={onNavigate}
+              >
+                <span className="searchresults__title">{entryTitle(entry)}</span>
+                <span className="searchresults__path">
+                  {formatMonthDay(entry.date)} · {subject.name} / {block.name}
+                </span>
+                {snippet && <span className="searchresults__snippet">{snippet}</span>}
+              </Link>
+            </li>
+          ))}
+        </SearchGroup>
+      )}
+
+      {results.truncated && (
+        <p className="searchresults__more">
+          종류마다 {SEARCH_LIMIT}개까지만 보여줍니다. 검색어를 더 좁혀 보세요.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function SearchGroup({ title, count, children }) {
+  return (
+    <section className="searchresults__group">
+      <h3 className="searchresults__grouptitle">
+        {title}
+        <span className="sidebar__sectioncount">{count}</span>
+      </h3>
+      <ul className="searchresults__list">{children}</ul>
+    </section>
   );
 }
 

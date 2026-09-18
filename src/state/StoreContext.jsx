@@ -134,6 +134,7 @@ export function StoreProvider({ children }) {
       removeBlock: (id) => dispatch({ type: ACTIONS.BLOCK_REMOVE, id }),
       reorderBlocks: (subjectId, orderedIds) =>
         dispatch({ type: ACTIONS.BLOCK_REORDER, subjectId, orderedIds }),
+      moveBlock: (id, subjectId) => dispatch({ type: ACTIONS.BLOCK_MOVE, id, subjectId }),
 
       // Entry
       addEntry: (input) => withId(ACTIONS.ENTRY_ADD, input),
