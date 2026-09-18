@@ -1,0 +1,15 @@
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# 학습 기록 백업 파일은 레포에 올리지 않는다 (개인 기록)
+learning-tracker-backup-*.json
+
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.log
+npm-debug.log*
