@@ -43,7 +43,13 @@ HashRouter 라 서버 리라이트 설정 없이도 `/subjects/...` 같은 주�
 ### 배포
 
 `main` 에 push 하면 `.github/workflows/deploy.yml` 이 빌드해서 Pages 에 올린다.
-따로 할 일은 없다. 배포 주소는 https://bluishgrey.github.io/learning-tracker/ 다.
+배포 주소는 https://bluishgrey.github.io/learning-tracker/ 다.
+
+> **처음 한 번은 저장소 설정이 필요하다** — Settings → Pages → Source 를
+> **GitHub Actions** 로 바꿔야 한다. 워크플로가 대신 켤 수는 없다. `GITHUB_TOKEN`
+> 에는 Pages 사이트를 *만드는* 권한이 없고(`pages: write` 는 이미 있는 사이트에
+> 배포하는 권한이다), 그래서 켜기 전의 첫 실행은 `configure-pages` 단계에서
+> 멈춘다. 한 번 켜 두면 그 뒤로는 손댈 일이 없다.
 
 Pages 의 소스를 브랜치가 아니라 **Actions** 로 둔 것은 빌드 결과물을 저장소에
 커밋하지 않기 위해서다. 커밋된 산출물은 소스와 어긋난 순간을 알 방법이 없다.
