@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Sheet from './Sheet.jsx';
 
 /**
@@ -30,19 +30,14 @@ export default function PasteImportSheet({
 }) {
   const [text, setText] = useState('');
   const [result, setResult] = useState(null);
-  const inputRef = useRef(null);
 
   // 열 때마다 빈 상태에서 시작한다. 지난번 텍스트가 남아 있으면
   // 무엇을 반영하려는 건지 헷갈린다.
-  //
-  // 포커스를 여기서 잡는 이유: Sheet 는 열릴 때 패널로 포커스를 옮긴다.
-  // 자식(Sheet)의 effect 가 먼저 돌고 부모(여기)가 나중이라, 이 자리에서 잡아야
-  // 최종 포커스가 입력칸에 남는다. 바로 Ctrl+V 로 붙여넣을 수 있어야 하는 창이다.
+  // (포커스는 Sheet 가 첫 입력칸 — 여기서는 이 textarea — 로 넣어 준다)
   useEffect(() => {
     if (!open) return;
     setText('');
     setResult(null);
-    inputRef.current?.focus();
   }, [open]);
 
   const read = () => setResult(parse(text));
@@ -85,7 +80,6 @@ export default function PasteImportSheet({
       <p className="field__hint">{hint}</p>
 
       <textarea
-        ref={inputRef}
         className="textarea textarea--code paste__input"
         value={text}
         onChange={(e) => {
