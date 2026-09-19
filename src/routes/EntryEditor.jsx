@@ -226,7 +226,7 @@ export default function EntryEditor() {
                 className="input"
                 value={newSubjectName}
                 onChange={(e) => setNewSubjectName(e.target.value)}
-                placeholder="예: CS50x"
+                placeholder="예: 수학"
               />
               <button
                 type="button"
@@ -291,7 +291,7 @@ export default function EntryEditor() {
                     className="input"
                     value={newBlockName}
                     onChange={(e) => setNewBlockName(e.target.value)}
-                    placeholder="예: Week 5"
+                    placeholder="예: 3주차"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
@@ -334,7 +334,7 @@ export default function EntryEditor() {
             className="textarea"
             value={form.content}
             onChange={(e) => patch({ content: e.target.value })}
-            placeholder={'# 오늘 한 것\n\n- 해시테이블 구현\n- `#`, `-`, `**굵게**` 등 마크다운을 씁니다'}
+            placeholder={'# 오늘 한 것\n\n- 개념 정리\n- `#`, `-`, `**굵게**` 등 마크다운을 씁니다'}
           />
         </div>
 
@@ -397,7 +397,7 @@ export default function EntryEditor() {
             className="textarea textarea--code"
             value={form.diagramCode}
             onChange={(e) => patch({ diagramCode: e.target.value })}
-            placeholder={'graph TD\n  A[해시 함수] --> B[버킷 26개]'}
+            placeholder={'graph TD\n  A[평균] --> B[표준편차]'}
             spellCheck={false}
           />
           <p className="field__hint">
@@ -473,7 +473,7 @@ export default function EntryEditor() {
         onClose={() => setImporting(false)}
         title="기록 가져오기"
         hint="claude.ai 가 만들어 준 ---ENTRY--- 형식 텍스트를 그대로 붙여넣으세요. 폼의 각 칸을 채우기만 하고, 저장은 직접 누르셔야 합니다."
-        placeholder={'---ENTRY---\n날짜: 2026-09-18\n과목: CS50x\n블록: Week 5\n\n내용:\n…\n---END---'}
+        placeholder={'---ENTRY---\n날짜: 2026-09-18\n과목: 수학\n블록: 3주차\n\n내용:\n…\n---END---'}
         parse={readEntry}
         applyLabel="폼에 채우기"
         onApply={applyEntry}

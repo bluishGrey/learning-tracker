@@ -222,7 +222,7 @@ export default function SubjectView() {
 
         {blocks.length === 0 ? (
           <div className="empty">
-            블록이 없습니다. 블록은 &quot;Week 5&quot;, &quot;React 기초 1부&quot; 같은 진도 단위입니다.
+            블록이 없습니다. 블록은 &quot;3주차&quot;, &quot;기초 1부&quot; 같은 진도 단위입니다.
           </div>
         ) : (
           <ul className="stack">
@@ -272,7 +272,7 @@ export default function SubjectView() {
         onClose={() => setImporting(null)}
         title="과목 정보 가져오기"
         hint={`claude.ai 가 만들어 준 ---SUBJECT--- 형식 텍스트를 붙여넣으세요. '${subject.name}' 의 설명·다이어그램·SVG 를 덮어쓰고, '블록 목록' 이 적혀 있으면 없는 블록을 만듭니다. (이미 있는 이름은 건드리지 않습니다)`}
-        placeholder={`---SUBJECT---\n과목: ${subject.name}\n\n설명:\n…\n\n블록 목록:\nWeek 0\nWeek 1\n---END---`}
+        placeholder={`---SUBJECT---\n과목: ${subject.name}\n\n설명:\n…\n\n블록 목록:\n1주차\n2주차\n---END---`}
         parse={readInfo}
         applyLabel="과목 정보 갱신"
         onApply={applyPlan}
@@ -322,7 +322,7 @@ export default function SubjectView() {
               className="input"
               value={blockName}
               onChange={(e) => setBlockName(e.target.value)}
-              placeholder="예: Week 5"
+              placeholder="예: 3주차"
             />
             <p className="field__hint">
               완료 체크는 블록 목록에서 직접 토글합니다. 여러 개를 한 번에 만들려면

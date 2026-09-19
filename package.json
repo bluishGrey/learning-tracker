@@ -2,7 +2,7 @@
   "name": "learning-tracker",
   "version": "0.1.0",
   "private": true,
-  "description": "군 복무 중 병행 학습 기록·시각화 대시보드",
+  "description": "여러 과목 병행 학습 기록·시각화 대시보드",
   "type": "module",
   "scripts": {
     "dev": "vite",

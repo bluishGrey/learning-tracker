@@ -91,7 +91,7 @@ export default function SubjectListView() {
               className="input"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="예: CS50x"
+              placeholder="예: 수학"
               autoFocus
             />
           </div>
