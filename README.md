@@ -1,5 +1,7 @@
 # 학습 트래커
 
+**배포된 주소 → https://bluishgrey.github.io/learning-tracker/**
+
 여러 과목을 동시에 공부하면서 **날짜별로 뭘 했는지**와
 **과목별로 얼마나 진행했는지**를 기록하고 한눈에 보는 개인용 대시보드.
 
@@ -37,6 +39,22 @@ HashRouter 라 서버 리라이트 설정 없이도 `/subjects/...` 같은 주�
 > `dist/index.html` 을 **파일로 직접 열면(`file://`) 동작하지 않는다.** 브라우저가
 > ES 모듈을 `file://` 에서 CORS 로 차단하기 때문이다(origin 이 `null` 이라 무조건 거부).
 > 정적 파일이라도 **HTTP 로 서빙**되어야 한다.
+
+### 배포
+
+`main` 에 push 하면 `.github/workflows/deploy.yml` 이 빌드해서 Pages 에 올린다.
+따로 할 일은 없다. 배포 주소는 https://bluishgrey.github.io/learning-tracker/ 다.
+
+Pages 의 소스를 브랜치가 아니라 **Actions** 로 둔 것은 빌드 결과물을 저장소에
+커밋하지 않기 위해서다. 커밋된 산출물은 소스와 어긋난 순간을 알 방법이 없다.
+그래서 `dist/` 는 계속 `.gitignore` 에 남아 있다.
+
+`npm install` 이 아니라 `npm ci` 로 빌드한다 — `package-lock.json` 을 그대로
+재현해서, 배포본이 어제와 다른 의존성으로 만들어지는 일을 막는다.
+
+자산 파일 이름에는 빌드마다 바뀌는 해시가 붙어 있어 낡은 자산을 물고 있을 일은
+없다. 다만 `index.html` 은 Pages 가 짧게(수 분) 캐시하므로, 배포가 끝난 직후에도
+몇 분간 이전 화면이 보일 수 있다. 바로 확인하고 싶으면 강제 새로고침을 하면 된다.
 
 ---
 

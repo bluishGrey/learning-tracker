@@ -57,7 +57,8 @@ npm install
 npm run dev
 ```
 
-> Node 가 없고 설치도 못 하는 PC라면: **배포된 URL로 브라우저에서 접속해 쓴다.**
+> Node 가 없고 설치도 못 하는 PC라면: **https://bluishgrey.github.io/learning-tracker/ 로
+> 브라우저에서 바로 접속해 쓴다.**
 > 앱을 쓰는 데에는 clone 도 Node 도 필요 없다 — 위 1~3번은 *코드를 고칠 때*의 절차다.
 > (학습 기록은 어느 쪽으로 열든 그 브라우저 안에만 있으므로 4번은 똑같이 해야 한다)
 
