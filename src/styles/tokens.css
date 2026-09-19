@@ -11,8 +11,16 @@
  * 온도를 유지한다. 중성 회색을 쓰면 따뜻한 배경 위에서 푸르게 떠 보인다.
  */
 
+/*
+ * 다크가 기본. 라이트는 아래 [data-theme='light'] 한 블록으로만 켜진다.
+ *
+ * 예전에는 @media (prefers-color-scheme: light) 로 갈랐는데, 그러면 사용자가
+ * 끼어들 자리가 없다. 시스템 설정을 읽어 'light' / 'dark' 중 하나로 **해석하는**
+ * 일은 JS(lib/theme.js + index.html 의 인라인 스크립트)가 맡고, CSS 는 해석된
+ * 결과 하나만 본다. 팔레트 정의가 두 벌로 늘어나지 않는다.
+ */
 :root {
-  color-scheme: dark light;
+  color-scheme: dark;
 
   /* ─ 표면 (다크가 기본) ─ */
   --bg: #141413;
@@ -83,36 +91,36 @@
   --sidebar-w: 268px;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #f5f4ed;
-    --surface: #fbfaf5;
-    --surface-2: #edece2;
-    --surface-3: #e2e0d4;
-    --border: #dbd9cc;
-    --border-strong: #b9b6a6;
+:root[data-theme='light'] {
+  color-scheme: light;
 
-    --text: #141413;
-    --text-dim: #5d5a50;
-    --text-faint: #8b8879;
+  --bg: #f5f4ed;
+  --surface: #fbfaf5;
+  --surface-2: #edece2;
+  --surface-3: #e2e0d4;
+  --border: #dbd9cc;
+  --border-strong: #b9b6a6;
 
-    --accent: #b2563a;
-    --accent-2: #c96442;
-    --accent-soft: #f6e9e3;
-    --accent-contrast: #ffffff;
+  --text: #141413;
+  --text-dim: #5d5a50;
+  --text-faint: #8b8879;
 
-    --danger: #c4282d;
-    --danger-soft: #fae9e9;
-    --warn: #96650c;
-    --warn-soft: #f9efd9;
-    --success: #2f7a44;
-    --success-soft: #e6f2e8;
+  --accent: #b2563a;
+  --accent-2: #c96442;
+  --accent-soft: #f6e9e3;
+  --accent-contrast: #ffffff;
 
-    --inactive-gray: #c6c3b6;
-    --weekend-sat: #2f6fb0;
+  --danger: #c4282d;
+  --danger-soft: #fae9e9;
+  --warn: #96650c;
+  --warn-soft: #f9efd9;
+  --success: #2f7a44;
+  --success-soft: #e6f2e8;
 
-    --shadow-sm: 0 1px 2px rgb(20 20 19 / 0.06);
-    --shadow: 0 2px 8px rgb(20 20 19 / 0.09);
-    --shadow-lg: 0 8px 32px rgb(20 20 19 / 0.18);
-  }
+  --inactive-gray: #c6c3b6;
+  --weekend-sat: #2f6fb0;
+
+  --shadow-sm: 0 1px 2px rgb(20 20 19 / 0.06);
+  --shadow: 0 2px 8px rgb(20 20 19 / 0.09);
+  --shadow-lg: 0 8px 32px rgb(20 20 19 / 0.18);
 }

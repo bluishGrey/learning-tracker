@@ -24,14 +24,21 @@ import { newId } from '../lib/id.js';
 export default function DiagramEmbed({ code }) {
   const [view, setView] = useState({ status: 'idle', svg: null, detail: null });
 
-  // 다크/라이트가 바뀌면 이미 그려 둔 그림의 색은 따라오지 않는다. 다시 그린다.
+  /*
+   * 다크/라이트가 바뀌면 이미 그려 둔 그림의 색은 따라오지 않는다. 다시 그린다.
+   *
+   * 시스템 설정이 아니라 **문서의 data-theme** 을 지켜본다. 사용자가 사이드바에서
+   * 직접 고른 경우에도 그 속성이 바뀌므로, 신호 하나만 보면 두 경우가 모두 잡힌다.
+   */
   const [themeNonce, setThemeNonce] = useState(0);
   useEffect(() => {
-    const mq = window.matchMedia?.('(prefers-color-scheme: light)');
-    if (!mq?.addEventListener) return undefined;
-    const bump = () => setThemeNonce((n) => n + 1);
-    mq.addEventListener('change', bump);
-    return () => mq.removeEventListener('change', bump);
+    if (typeof MutationObserver === 'undefined') return undefined;
+    const observer = new MutationObserver(() => setThemeNonce((n) => n + 1));
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -128,8 +135,8 @@ function buildConfig() {
   const css = getComputedStyle(document.documentElement);
   const v = (name, fallback) => css.getPropertyValue(name).trim() || fallback;
 
-  // 앱의 기본값이 다크다. 라이트는 prefers-color-scheme 로만 켜진다.
-  const isDark = !window.matchMedia?.('(prefers-color-scheme: light)').matches;
+  // 해석이 끝난 값만 본다 (lib/theme.js 가 시스템 설정까지 여기에 풀어 둔다)
+  const isDark = document.documentElement.dataset.theme !== 'light';
 
   return {
     startOnLoad: false,

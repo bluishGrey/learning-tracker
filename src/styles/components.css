@@ -1038,6 +1038,9 @@
 .sidebar {
   width: var(--sidebar-w);
   flex: none;
+  /* 세로 flex — 바닥 고정 푸터(테마 전환)가 margin-top:auto 로 밀려 내려간다 */
+  display: flex;
+  flex-direction: column;
   background: var(--surface);
   border-right: 1px solid var(--border);
   padding: var(--sp-3) var(--sp-2) var(--sp-5);
@@ -1833,4 +1836,61 @@
   margin-top: var(--sp-2);
   line-height: 1.6;
   word-break: break-word;
+}
+
+/* ═══ 테마 전환 ═══════════════════════════════════════════ */
+
+/*
+ * 사이드바 바닥에 붙는다. sticky 라서 트리가 길어져 스크롤이 생겨도
+ * 화면 안에 남는다. 아래쪽 음수 여백은 사이드바의 패딩을 덮어, 스크롤할 때
+ * 이 줄 밑으로 트리가 비쳐 보이지 않게 한다.
+ */
+.sidebar__footer {
+  /* 내용이 짧으면 바닥으로 밀리고(auto), 길어 스크롤이 생기면 붙어 있는다(sticky) */
+  margin-top: auto;
+  position: sticky;
+  bottom: calc(var(--sp-5) * -1);
+  margin-right: calc(var(--sp-2) * -1);
+  margin-bottom: calc(var(--sp-5) * -1);
+  margin-left: calc(var(--sp-2) * -1);
+  padding: var(--sp-3) var(--sp-2);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.themetoggle {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+.themetoggle__btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 30px;
+  padding: 0 var(--sp-1);
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 0.74rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.themetoggle__btn:hover {
+  color: var(--text-dim);
+}
+
+/* 지금 켜진 칸 — 눌린 상태가 색만이 아니라 면으로도 보여야 한다 */
+.themetoggle__btn--on {
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
 }

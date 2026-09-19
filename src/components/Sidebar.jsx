@@ -3,6 +3,7 @@ import { Link, matchPath, useLocation } from 'react-router-dom';
 import { useStore } from '../state/StoreContext.jsx';
 import { selectBlocks, selectBlockEntries, selectSearch, SEARCH_LIMIT } from '../state/selectors.js';
 import SubjectDot from './SubjectDot.jsx';
+import ThemeToggle from './ThemeToggle.jsx';
 import { entryTitle } from '../lib/entryTitle.js';
 import { todayKey, monthKeyOf, formatMonthDay } from '../lib/date.js';
 
@@ -114,6 +115,14 @@ export default function Sidebar({ open, onNavigate }) {
           onNavigate={onNavigate}
         />
       )}
+
+      {/*
+        바닥에 붙여 둔다 — 자주 만지는 것이 아니라 트리보다 아래가 맞고,
+        sticky 라서 트리가 길어져도 스크롤 밖으로 사라지지 않는다.
+      */}
+      <div className="sidebar__footer">
+        <ThemeToggle />
+      </div>
     </aside>
   );
 }
