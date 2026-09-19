@@ -1782,3 +1782,55 @@
 .entryview__progress {
   margin-top: var(--sp-2);
 }
+
+/* ═══ 주고받기 버튼 묶음 ═══════════════════════════════════ */
+
+/*
+ * '자기 자신'과 '하위 전체'를 묶음으로 가른다. 버튼 넷이 한 줄로 늘어서 있으면
+ * "과목 정보 내보내기"와 "과목 전체 내보내기"의 차이를 매번 라벨로 읽어야 한다.
+ */
+.exchange {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin: var(--sp-4) 0;
+}
+
+.exchange__group {
+  flex: 1 1 260px;
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.exchange__label {
+  margin: 0 0 var(--sp-2);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.exchange__hint {
+  display: block;
+  margin-top: 2px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 0.74rem;
+  color: var(--text-faint);
+}
+
+.exchange__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.paste__note {
+  margin-top: var(--sp-2);
+  line-height: 1.6;
+  word-break: break-word;
+}

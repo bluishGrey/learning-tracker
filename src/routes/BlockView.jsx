@@ -7,14 +7,23 @@ import EntryRow from '../components/EntryRow.jsx';
 import Markdown from '../components/Markdown.jsx';
 import DiagramEmbed from '../components/DiagramEmbed.jsx';
 import SvgEmbed from '../components/SvgEmbed.jsx';
+import FigurePair from '../components/FigurePair.jsx';
 import ProgressBar from '../components/ProgressBar.jsx';
 import ProgressTrend from '../components/ProgressTrend.jsx';
+import ExchangeBar from '../components/ExchangeBar.jsx';
 import PasteImportSheet from '../components/PasteImportSheet.jsx';
+import ManualCopySheet, { useTextExport } from '../components/ManualCopySheet.jsx';
 import Sheet from '../components/Sheet.jsx';
 import NotFound from './NotFound.jsx';
-import { copyText } from '../lib/clipboard.js';
-import { buildBlockExportText, summarizeBlockExport } from '../lib/exportBlock.js';
-import { parseBlockText, resolveTarget, buildBlockInfoText, summarizeBlockInfo } from '../lib/structuredText.js';
+import {
+  parseBlockText,
+  parseDocuments,
+  resolveTarget,
+  buildBlockInfoText,
+  buildEntriesText,
+  summarizeSelfInfo,
+} from '../lib/structuredText.js';
+import { planEntriesImport, describePlan } from '../lib/importPlan.js';
 
 /**
  * 경로 B의 세 번째 단계 — 블록 하나.
@@ -24,8 +33,12 @@ import { parseBlockText, resolveTarget, buildBlockInfoText, summarizeBlockInfo }
  *      것을 통째로 받아 두는 자리다.
  *   2. **블록에 속한 기록들** — 날짜순 목록.
  *
- * 그래서 내보내기 버튼도 둘이다. 이름을 '기록 내보내기'와 '블록 정보 내보내기'로
- * 갈라 둔 이유가 여기 있다 — 무엇이 클립보드에 담기는지 버튼 이름만 보고 알아야 한다.
+ * 그래서 주고받기도 두 묶음이다. '블록 정보'와 '기록 전체'를 라벨로 갈라 둔 이유가
+ * 여기 있다 — 무엇이 클립보드에 담기는지 버튼 이름만 보고 알아야 한다.
+ *
+ * **여러 기록을 한 번에 가져오는 자리는 여기다.** 이 화면은 이미 기록 목록을
+ * 보여주고 있어서, 가져오기가 끝나면 결과가 그 자리에서 바로 보인다.
+ * ('새 기록' 화면은 이름 그대로 기록 하나만 다룬다)
  */
 export default function BlockView() {
   const { subjectId, blockId } = useParams();
@@ -35,9 +48,9 @@ export default function BlockView() {
 
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [importing, setImporting] = useState(false);
-  // 클립보드가 막힌 환경(file:// 등)에서 직접 복사할 수 있도록 원문을 띄운다
-  const [manualCopy, setManualCopy] = useState(null);
+  const [importing, setImporting] = useState(null); // 'info' | 'entries'
+
+  const { exportText, manualCopyProps } = useTextExport(actions.setNotice);
 
   const subject = state.subjects[subjectId];
   const block = state.blocks[blockId];
@@ -49,28 +62,23 @@ export default function BlockView() {
   const progress = selectBlockProgress(block);
   const trend = selectBlockTrend(index, blockId);
 
-  const copyOrShow = async (text, successMessage) => {
-    const result = await copyText(text);
-    if (result.ok) {
-      actions.setNotice({ level: 'success', message: successMessage });
-    } else {
-      // 조용히 실패하지 않는다. 직접 복사할 수 있게 원문을 보여준다.
-      setManualCopy(text);
-    }
-  };
-
+  /**
+   * 내보내기는 누를 때마다 **지금의 기록을 새로 훑어** 조립한다.
+   * 블록에 기록 요약본을 따로 저장해 두지 않으므로, 기록을 고치거나 지운 뒤에
+   * 내보내도 결과가 화면과 어긋날 수 없다.
+   */
   const exportEntries = () => {
     if (entries.length === 0) return;
-    copyOrShow(
-      buildBlockExportText(entries),
-      `${block.name} — ${summarizeBlockExport(entries)}를 클립보드에 복사했습니다.`
+    exportText(
+      buildEntriesText(subject, block, selectBlockEntries(index, blockId)),
+      `${block.name} — 기록 ${entries.length}개를 복사했습니다.`
     );
   };
 
   const exportBlockInfo = () =>
-    copyOrShow(
+    exportText(
       buildBlockInfoText(subject, block),
-      `${block.name} 블록 정보를 클립보드에 복사했습니다. (${summarizeBlockInfo(block)})`
+      `${block.name} 블록 정보를 복사했습니다. (${summarizeSelfInfo(block)})`
     );
 
   /**
@@ -101,6 +109,24 @@ export default function BlockView() {
     return parsed;
   };
 
+  /** 여러 ---ENTRY--- 를 이 블록으로. 다른 블록의 기록이 섞여 있으면 계획기가 막는다. */
+  const readEntries = (text) => {
+    const parsed = parseDocuments(text);
+    if (!parsed.ok) return { ok: false, value: null, errors: parsed.errors, warnings: [] };
+
+    const planned = planEntriesImport(state, parsed.docs, { subjectId, blockId });
+    if (!planned.ok) return { ok: false, value: null, errors: planned.errors, warnings: [] };
+    return { ok: true, value: planned, errors: [], warnings: parsed.warnings };
+  };
+
+  const applyEntries = (planned) => {
+    actions.applyBundle(planned.plan);
+    actions.setNotice({
+      level: 'success',
+      message: `가져오기 완료 — ${describePlan(planned.summary)}`,
+    });
+  };
+
   const applyBlockInfo = (value) => {
     actions.updateBlock(blockId, {
       description: value.description,
@@ -113,8 +139,6 @@ export default function BlockView() {
       message: `${block.name} 블록 정보를 갱신했습니다.`,
     });
   };
-
-  const hasFigures = Boolean(block.diagramCode?.trim() || block.svgCode?.trim());
 
   return (
     <main className="page">
@@ -154,35 +178,37 @@ export default function BlockView() {
         >
           {block.isCompleted ? '✓ 완료됨 — 해제' : '완료로 표시'}
         </button>
-        <button
-          type="button"
-          className="btn"
-          onClick={exportEntries}
-          disabled={entries.length === 0}
-          title={entries.length === 0 ? '내보낼 기록이 없습니다' : '이 블록의 기록들을 클립보드로'}
-        >
-          ⧉ 기록 내보내기
-        </button>
-        <button
-          type="button"
-          className="btn"
-          onClick={exportBlockInfo}
-          title="블록 자체 정보(설명·진행률·다이어그램·SVG)를 클립보드로"
-        >
-          ⧉ 블록 정보 내보내기
-        </button>
-        <button
-          type="button"
-          className="btn"
-          onClick={() => setImporting(true)}
-          title="claude.ai 가 만들어 준 ---BLOCK--- 텍스트를 붙여넣기"
-        >
-          ⤓ 블록 정보 가져오기
-        </button>
         <button type="button" className="btn" onClick={() => setEditing(true)}>
           블록 설정
         </button>
       </div>
+
+      <ExchangeBar
+        groups={[
+          {
+            label: '이 블록 정보',
+            hint: '설명 · 진행률 · 다이어그램 · SVG',
+            actions: [
+              { kind: 'export', label: '블록 정보 내보내기', onClick: exportBlockInfo },
+              { kind: 'import', label: '블록 정보 가져오기', onClick: () => setImporting('info') },
+            ],
+          },
+          {
+            label: '기록 전체',
+            hint: `${entries.length}개`,
+            actions: [
+              {
+                kind: 'export',
+                label: '기록 전체 내보내기',
+                onClick: exportEntries,
+                disabled: entries.length === 0,
+                title: entries.length === 0 ? '내보낼 기록이 없습니다' : undefined,
+              },
+              { kind: 'import', label: '기록 전체 가져오기', onClick: () => setImporting('entries') },
+            ],
+          },
+        ]}
+      />
 
       {block.description?.trim() && (
         <section className="section blockdesc">
@@ -197,27 +223,10 @@ export default function BlockView() {
       </div>
 
       {/* 블록 자체의 그림 — 다이어그램이 위, SVG 가 아래 */}
-      {hasFigures ? (
-        <>
-          {block.diagramCode?.trim() && (
-            <section className="section">
-              <h2 className="section__title">다이어그램</h2>
-              <DiagramEmbed code={block.diagramCode} />
-            </section>
-          )}
-          {block.svgCode?.trim() && (
-            <section className="section">
-              <h2 className="section__title">SVG</h2>
-              <SvgEmbed code={block.svgCode} />
-            </section>
-          )}
-        </>
-      ) : (
-        <p className="empty empty--quiet">
-          이 블록의 다이어그램과 SVG 가 여기에 표시됩니다. <strong>블록 정보 가져오기</strong> 로
-          claude.ai 가 만들어 준 텍스트를 붙여넣거나, 블록 설정에서 직접 입력하세요.
-        </p>
-      )}
+      <FigurePair
+        unit={block}
+        emptyHint="이 블록의 다이어그램과 SVG 가 여기에 표시됩니다. 블록 정보 가져오기로 붙여넣거나, 블록 설정에서 직접 입력하세요."
+      />
 
       {trend.length > 0 && (
         <section className="section">
@@ -278,8 +287,8 @@ export default function BlockView() {
 
       {/* 블록 정보 가져오기 */}
       <PasteImportSheet
-        open={importing}
-        onClose={() => setImporting(false)}
+        open={importing === 'info'}
+        onClose={() => setImporting(null)}
         title="블록 정보 가져오기"
         hint={`claude.ai 가 만들어 준 ---BLOCK--- 형식 텍스트를 그대로 붙여넣으세요. '${subject.name} / ${block.name}' 의 설명·진행률·다이어그램·SVG 를 덮어씁니다.`}
         placeholder={'---BLOCK---\n과목: ' + subject.name + '\n블록: ' + block.name + '\n\n설명:\n…\n---END---'}
@@ -287,6 +296,19 @@ export default function BlockView() {
         applyLabel="블록 정보 갱신"
         onApply={applyBlockInfo}
         renderPreview={(value) => <BlockInfoPreview value={value} />}
+      />
+
+      {/* 기록 전체 가져오기 — 여러 ---ENTRY--- 를 한 번에 */}
+      <PasteImportSheet
+        open={importing === 'entries'}
+        onClose={() => setImporting(null)}
+        title="기록 전체 가져오기"
+        hint={`---ENTRY--- 문서가 여러 개 이어진 텍스트를 붙여넣으세요. 모두 '${subject.name} / ${block.name}' 소속이어야 하고, 같은 날짜·제목의 기록은 갱신합니다.`}
+        placeholder={`---ENTRY---\n날짜: 2026-09-18\n과목: ${subject.name}\n블록: ${block.name}\n\n내용:\n…\n---END---\n\n---ENTRY---\n…\n---END---`}
+        parse={readEntries}
+        applyLabel="기록 반영"
+        onApply={applyEntries}
+        renderPreview={(planned) => <EntriesPlanPreview planned={planned} />}
       />
 
       {/* 삭제 확인 */}
@@ -318,34 +340,32 @@ export default function BlockView() {
         </div>
       </Sheet>
 
-      {/* 클립보드가 막힌 경우의 수동 복사 */}
-      <Sheet
-        open={manualCopy !== null}
-        title="직접 복사해 주세요"
-        onClose={() => setManualCopy(null)}
-        footer={
-          <button
-            type="button"
-            className="btn btn--primary btn--block"
-            onClick={() => setManualCopy(null)}
-          >
-            닫기
-          </button>
-        }
-      >
-        <div className="callout callout--warn">
-          브라우저가 클립보드 접근을 막았습니다. (파일을 직접 열었거나 권한이 거부된 경우) 아래
-          내용을 전체 선택해 복사하세요.
-        </div>
-        <textarea
-          className="textarea textarea--code"
-          readOnly
-          value={manualCopy ?? ''}
-          onFocus={(e) => e.target.select()}
-          style={{ minHeight: '220px' }}
-        />
-      </Sheet>
+      <ManualCopySheet {...manualCopyProps} />
     </main>
+  );
+}
+
+/** 기록 일괄 가져오기 요약 — 몇 개가 새로 들어오고 몇 개가 바뀌는지 */
+function EntriesPlanPreview({ planned }) {
+  const { summary, plan } = planned;
+  const updating = plan.entries.filter((e) => !e.isNew).map((e) => `${e.data.date} ${e.data.title ?? ''}`.trim());
+
+  return (
+    <>
+      <dl className="paste__preview">
+        <div className="paste__previewrow">
+          <dt>추가</dt>
+          <dd>{summary.entriesAdded}개</dd>
+        </div>
+        <div className="paste__previewrow">
+          <dt>갱신</dt>
+          <dd>{summary.entriesUpdated}개</dd>
+        </div>
+      </dl>
+      {updating.length > 0 && (
+        <p className="field__hint paste__note">덮어쓸 기록: {updating.join(' · ')}</p>
+      )}
+    </>
   );
 }
 

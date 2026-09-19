@@ -136,6 +136,9 @@ export function StoreProvider({ children }) {
         dispatch({ type: ACTIONS.BLOCK_REORDER, subjectId, orderedIds }),
       moveBlock: (id, subjectId) => dispatch({ type: ACTIONS.BLOCK_MOVE, id, subjectId }),
 
+      /** 일괄 가져오기 — lib/importPlan.js 가 만든 계획을 한 번에 반영 */
+      applyBundle: (plan) => dispatch({ type: ACTIONS.BUNDLE_APPLY, plan }),
+
       // Entry
       addEntry: (input) => withId(ACTIONS.ENTRY_ADD, input),
       updateEntry: (id, patch) => dispatch({ type: ACTIONS.ENTRY_UPDATE, id, patch }),

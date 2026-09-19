@@ -39,6 +39,8 @@ export const ACTIONS = {
   ENTRY_REMOVE: 'entry/remove',
   ENTRY_MOVE: 'entry/move',
 
+  BUNDLE_APPLY: 'bundle/apply',
+
   SETTINGS_UPDATE: 'settings/update',
   EXPORT_MARK: 'export/mark',
   DATA_REPLACE: 'data/replace',
@@ -49,7 +51,7 @@ export function reducer(state, action) {
   switch (action.type) {
     // ─── Subject ───────────────────────────────────────────
     case ACTIONS.SUBJECT_ADD: {
-      const { id, name, totalBlocks, customColor } = action;
+      const { id, name, totalBlocks, customColor, description, diagramCode, svgCode } = action;
 
       // 이미 쓰이는 색과 겹치지 않는 다음 순번을 고른다.
       // (백업 병합으로 순번이 건너뛰어졌을 수 있으므로 커서만 믿지 않는다)
@@ -72,6 +74,9 @@ export function reducer(state, action) {
             colorHue: hue,
             customColor: normalizeCustomColor(customColor),
             totalBlocks: toNonNegativeInt(totalBlocks),
+            description: String(description ?? ''),
+            diagramCode: normalizeDiagram(diagramCode),
+            svgCode: normalizeSvg(svgCode),
             createdAt: at,
             updatedAt: at,
           },
@@ -91,6 +96,15 @@ export function reducer(state, action) {
       // null 을 넘기면 자동 배정 색으로 되돌아간다.
       if (action.patch.customColor !== undefined) {
         patch.customColor = normalizeCustomColor(action.patch.customColor);
+      }
+      if (action.patch.description !== undefined) {
+        patch.description = String(action.patch.description);
+      }
+      if (action.patch.diagramCode !== undefined) {
+        patch.diagramCode = normalizeDiagram(action.patch.diagramCode);
+      }
+      if (action.patch.svgCode !== undefined) {
+        patch.svgCode = normalizeSvg(action.patch.svgCode);
       }
       return touch({
         ...state,
@@ -302,6 +316,86 @@ export function reducer(state, action) {
           [action.id]: { ...current, blockId: action.blockId, updatedAt: nowIso() },
         },
       });
+    }
+
+    /**
+     * 일괄 가져오기 반영 — 과목 정보·블록들·기록들을 한 번에.
+     *
+     * 액션 하나로 끝내는 이유:
+     *  - **원자성.** 중간에 멈추면 절반만 들어간 상태가 남는데, 그건 사용자가
+     *    되돌릴 수 없는 상태다. 계획이 통째로 적용되거나 아예 적용되지 않거나 둘 중 하나여야 한다.
+     *  - 리렌더와 저장(lastChangeAt)도 한 번만 일어난다.
+     *
+     * 계획(plan)은 lib/importPlan.js 가 만든다. id 는 호출부가 미리 만들어 싣는
+     * 이 파일의 규칙을 따르되, **order 만은 여기서 계산한다** — 파생값은 reducer 가
+     * state 를 보고 정하는 쪽이 낡은 값을 참조할 여지가 없다.
+     */
+    case ACTIONS.BUNDLE_APPLY: {
+      const { plan } = action;
+      const subject = state.subjects[plan.subjectId];
+      if (!subject) return state;
+
+      const at = nowIso();
+
+      const subjects = plan.subjectPatch
+        ? {
+            ...state.subjects,
+            [plan.subjectId]: {
+              ...subject,
+              description: String(plan.subjectPatch.description ?? ''),
+              diagramCode: normalizeDiagram(plan.subjectPatch.diagramCode),
+              svgCode: normalizeSvg(plan.subjectPatch.svgCode),
+              updatedAt: at,
+            },
+          }
+        : state.subjects;
+
+      const blocks = { ...state.blocks };
+      let nextOrder = nextBlockOrder(state, plan.subjectId);
+
+      for (const item of plan.blocks) {
+        const current = blocks[item.id];
+        const patch = {
+          description: String(item.patch.description ?? ''),
+          progressPercent: normalizePercent(item.patch.progressPercent),
+          diagramCode: normalizeDiagram(item.patch.diagramCode),
+          svgCode: normalizeSvg(item.patch.svgCode),
+        };
+
+        blocks[item.id] = current
+          ? { ...current, ...patch, updatedAt: at }
+          : {
+              id: item.id,
+              subjectId: plan.subjectId,
+              name: String(item.name ?? '').trim(),
+              isCompleted: false,
+              // 새로 만드는 블록이 여럿이면 순번이 겹치지 않게 하나씩 올린다
+              order: nextOrder++,
+              ...patch,
+              createdAt: at,
+              updatedAt: at,
+            };
+      }
+
+      const entries = { ...state.entries };
+      for (const item of plan.entries) {
+        const current = entries[item.id];
+        const data = {
+          date: item.data.date,
+          title: normalizeTitle(item.data.title),
+          tags: normalizeTags(item.data.tags),
+          content: String(item.data.content ?? ''),
+          progressPercent: normalizePercent(item.data.progressPercent),
+          diagramCode: normalizeDiagram(item.data.diagramCode),
+          svgCode: normalizeSvg(item.data.svgCode),
+        };
+
+        entries[item.id] = current
+          ? { ...current, ...data, blockId: item.blockId, updatedAt: at }
+          : { id: item.id, blockId: item.blockId, ...data, createdAt: at, updatedAt: at };
+      }
+
+      return touch({ ...state, subjects, blocks, entries });
     }
 
     // ─── 설정 / 데이터 전체 ──────────────────────────────────

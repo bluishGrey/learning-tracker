@@ -183,6 +183,16 @@ export function validateStateShape(data) {
         message: '전체 진도 단위 수가 0 이상의 숫자가 아닙니다.',
       });
     }
+    // ─ v4 에서 추가된 Subject 자체 정보. 전부 선택 필드다. ─
+    if (s.description != null && typeof s.description !== 'string') {
+      errors.push({ path: at('description'), message: '과목 설명이 문자열이 아닙니다.' });
+    }
+    if (s.diagramCode != null && typeof s.diagramCode !== 'string') {
+      errors.push({ path: at('diagramCode'), message: '다이어그램 코드가 문자열이 아닙니다.' });
+    }
+    if (s.svgCode != null && typeof s.svgCode !== 'string') {
+      errors.push({ path: at('svgCode'), message: 'SVG 코드가 문자열이 아닙니다.' });
+    }
   });
 
   // ─ Block ─

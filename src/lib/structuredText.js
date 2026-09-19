@@ -27,6 +27,8 @@
 
 import { isValidDateKey } from './date.js';
 
+export const SUBJECT_MARKER = '---SUBJECT---';
+export const BLOCKLIST_MARKER = '---BLOCKLIST---';
 export const ENTRY_MARKER = '---ENTRY---';
 export const BLOCK_MARKER = '---BLOCK---';
 export const END_MARKER = '---END---';
@@ -42,12 +44,25 @@ const K = {
   PROGRESS: '진행률',
   DIAGRAM: '다이어그램',
   SVG: 'SVG',
+  BLOCKLIST: '블록 목록',
 };
 
 /** 한 줄로 끝나는 값들. 나머지는 다음 키워드가 나올 때까지 여러 줄을 먹는다. */
 const SINGLE_LINE = new Set([K.DATE, K.SUBJECT, K.BLOCK, K.TITLE, K.TAGS, K.PROGRESS]);
 
 const FORMS = {
+  blocklist: {
+    marker: BLOCKLIST_MARKER,
+    label: '블록 목록',
+    fields: [K.SUBJECT, K.BLOCKLIST],
+    required: [K.SUBJECT, K.BLOCKLIST],
+  },
+  subject: {
+    marker: SUBJECT_MARKER,
+    label: '과목 정보',
+    fields: [K.SUBJECT, K.DESCRIPTION, K.DIAGRAM, K.SVG],
+    required: [K.SUBJECT, K.DESCRIPTION],
+  },
   entry: {
     marker: ENTRY_MARKER,
     label: '기록',
@@ -70,26 +85,44 @@ const FORMS = {
  * @returns {{ ok: boolean, value: object|null, errors: string[], warnings: string[] }}
  */
 export function parseEntryText(text) {
-  const parsed = parseStructured(text, 'entry');
-  if (!parsed.ok) return parsed;
+  const parsed = parseDocuments(text);
+  if (!parsed.ok) {
+    return { ok: false, value: null, errors: parsed.errors, warnings: parsed.warnings };
+  }
 
-  const f = parsed.fields;
-  return {
-    ok: true,
-    value: {
-      date: f[K.DATE],
-      subjectName: f[K.SUBJECT],
-      blockName: f[K.BLOCK],
-      title: f[K.TITLE] ?? '',
-      tags: f[K.TAGS] ?? [],
-      content: f[K.CONTENT],
-      progressPercent: f[K.PROGRESS] ?? null,
-      diagramCode: f[K.DIAGRAM] ?? '',
-      svgCode: f[K.SVG] ?? '',
-    },
-    errors: [],
-    warnings: parsed.warnings,
-  };
+  const entries = parsed.docs.filter((d) => d.kind === 'entry');
+  const others = parsed.docs.filter((d) => d.kind !== 'entry');
+
+  if (entries.length === 0) {
+    return { ok: false, value: null, errors: [describeMissingMarker(others, FORMS.entry)], warnings: [] };
+  }
+
+  // '새 기록' 은 이름 그대로 기록 하나를 다루는 화면이다. 여러 개가 한꺼번에
+  // 반영되면 방금 무엇이 들어갔는지 화면에서 확인할 길이 없다.
+  // 여러 기록은 그 목록을 이미 보여주고 있는 블록 상세에서 받는다.
+  if (entries.length > 1) {
+    return {
+      ok: false,
+      value: null,
+      errors: [
+        `기록이 ${entries.length}개 들어 있습니다. 새 기록 화면에서는 기록 하나만 가져올 수 있습니다. 여러 개를 한 번에 가져오려면 블록 페이지의 '기록 전체 가져오기' 를 이용하세요.`,
+      ],
+      warnings: [],
+    };
+  }
+
+  if (others.length > 0) {
+    return {
+      ok: false,
+      value: null,
+      errors: [
+        `기록 외에 ${others.map((d) => FORMS[d.kind].label).join(', ')} 형식이 함께 들어 있습니다. 새 기록 화면에서는 기록 하나만 가져올 수 있습니다.`,
+      ],
+      warnings: [],
+    };
+  }
+
+  return { ok: true, value: entries[0].value, errors: [], warnings: parsed.warnings };
 }
 
 /**
@@ -117,28 +150,103 @@ export function parseBlockText(text) {
 }
 
 /**
- * 두 형식의 공통 파서.
+ * ---BLOCKLIST--- 텍스트 → 만들 블록 이름들.
+ * @returns {{ ok: boolean, value: object|null, errors: string[], warnings: string[] }}
+ */
+export function parseBlockListText(text) {
+  const parsed = parseStructured(text, 'blocklist');
+  if (!parsed.ok) return parsed;
+
+  const value = toValue('blocklist', parsed.fields);
+  if (value.blockNames.length === 0) {
+    return { ok: false, value: null, errors: ['블록 목록이 비어 있습니다.'], warnings: [] };
+  }
+  return { ok: true, value, errors: [], warnings: parsed.warnings };
+}
+
+/**
+ * 한 줄에 하나씩 적힌 블록 이름.
+ *
+ * 목록 기호(`-`, `*`, `1.`)는 떼고 읽는다. claude.ai 가 목록을 물으면 마크다운
+ * 불릿으로 답하는 일이 흔한데, 그것 때문에 이름이 "- Week 0" 이 되면 곤란하다.
+ * 같은 이름이 두 번 적혀 있으면 한 번만 센다.
+ */
+function splitBlockNames(text) {
+  const seen = new Set();
+  const out = [];
+  for (const raw of String(text ?? '').split('\n')) {
+    const name = raw.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '').trim();
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    out.push(name);
+  }
+  return out;
+}
+
+/**
+ * ---SUBJECT--- 텍스트 → 과목 자체 정보.
+ * @returns {{ ok: boolean, value: object|null, errors: string[], warnings: string[] }}
+ */
+export function parseSubjectText(text) {
+  const parsed = parseStructured(text, 'subject');
+  if (!parsed.ok) return parsed;
+  return { ok: true, value: toValue('subject', parsed.fields), errors: [], warnings: parsed.warnings };
+}
+
+/**
+ * 한 텍스트 안의 모든 문서를 **나온 순서대로** 잘라낸다.
+ *
+ * 과목 전체 내보내기처럼 SUBJECT 하나 + BLOCK 여럿 + ENTRY 여럿이 한 덩어리로
+ * 오가므로, 파서의 입구는 '문서 하나'가 아니라 '문서 목록'이어야 한다.
+ *
+ * 마커도 키워드와 같은 규칙을 따른다 — 줄 맨 앞이어야 하고, 코드펜스 안에서는
+ * 마커로 보지 않는다. 기록 내용에 이 형식을 설명하는 예시가 들어 있어도
+ * 문서 경계가 밀리지 않아야 한다.
+ *
+ * ---END--- 가 빠졌으면 다음 마커 직전까지를 그 문서의 몸통으로 본다.
+ * 복사가 조금 어긋나도 앞 문서까지는 살린다.
+ */
+function sliceDocuments(text) {
+  const lines = String(text ?? '').replace(/\r\n?/g, '\n').split('\n');
+  const byMarker = new Map(Object.entries(FORMS).map(([name, form]) => [form.marker, name]));
+
+  const docs = [];
+  let open = null;
+  let inFence = false;
+
+  lines.forEach((line, i) => {
+    if (line.trimStart().startsWith('```')) inFence = !inFence;
+    if (inFence) return;
+
+    const trimmed = line.trim();
+
+    if (byMarker.has(trimmed)) {
+      if (open) docs.push({ ...open, bodyLines: lines.slice(open.from, i) });
+      open = { kind: byMarker.get(trimmed), marker: trimmed, line: i + 1, from: i + 1 };
+      return;
+    }
+
+    if (trimmed === END_MARKER && open) {
+      docs.push({ ...open, bodyLines: lines.slice(open.from, i) });
+      open = null;
+    }
+  });
+
+  if (open) docs.push({ ...open, bodyLines: lines.slice(open.from) });
+  return { lines, docs };
+}
+
+/**
+ * 잘라낸 문서 하나의 몸통에서 필드를 읽는다.
  *
  * 키워드는 **줄 맨 앞**에 있어야 한다. 들여쓰기된 `SVG:` 같은 줄을 키워드로 보면
  * 내용 안의 코드·목록이 필드 경계로 오인되기 때문이다. 같은 이유로 코드펜스(```)
  * 안에서는 어떤 줄도 키워드로 보지 않는다 — 다이어그램 본문이 바로 코드펜스다.
  */
-function parseStructured(text, formName) {
-  const form = FORMS[formName];
-  const raw = String(text ?? '').replace(/\r\n?/g, '\n');
-  const lines = raw.split('\n');
-
-  const start = lines.findIndex((line) => line.trim() === form.marker);
-  if (start < 0) {
-    return { ok: false, value: null, errors: [describeMissingMarker(lines, form)], warnings: [] };
-  }
-
-  // ---END--- 가 없으면 텍스트 끝까지로 본다. 복사가 조금 잘려도 앞부분은 살린다.
-  let end = lines.findIndex((line, i) => i > start && line.trim() === END_MARKER);
-  if (end < 0) end = lines.length;
-
-  const body = lines.slice(start + 1, end);
-  const keyPattern = new RegExp(`^(${form.fields.map(escapeRegExp).join('|')})[ \t]*:(.*)$`);
+function parseBody(body, form) {
+  // 긴 이름부터 나열한다. '블록|블록 목록' 순서면 "블록 목록:" 줄이 '블록' 에 먼저 걸린다.
+  const keys = [...form.fields].sort((a, b) => b.length - a.length);
+  const keyPattern = new RegExp(`^(${keys.map(escapeRegExp).join('|')})[ \t]*:(.*)$`);
 
   /** @type {Record<string, string[]>} 키 → 원본 줄들 */
   const collected = {};
@@ -152,7 +260,9 @@ function parseStructured(text, formName) {
     // 같은 키가 두 번 나오면 뒤쪽은 값의 일부로 본다 (내용 안의 "진행률: ..." 같은 줄)
     if (match && !Object.hasOwn(collected, match[1])) {
       current = match[1];
-      collected[current] = [match[2]];
+      // 콜론 뒤 공백은 구분자이지 값이 아니다. 여러 줄 필드를 "설명: 값" 처럼
+      // 한 줄에 붙여 써도 값 앞에 공백이 딸려 들어가지 않게 한다.
+      collected[current] = [match[2].replace(/^[ \t]+/, '')];
       if (SINGLE_LINE.has(current)) current = null;
       continue;
     }
@@ -216,13 +326,104 @@ function parseStructured(text, formName) {
   return { ok: true, value: null, fields, errors, warnings };
 }
 
-/** 시작 표시가 없을 때 — 다른 형식을 붙여넣은 경우를 따로 짚어준다 */
-function describeMissingMarker(lines, form) {
-  const other = form.marker === ENTRY_MARKER ? FORMS.block : FORMS.entry;
-  const hasOther = lines.some((line) => line.trim() === other.marker);
+/**
+ * 형식 하나짜리 파서 — 그 형식의 첫 문서만 읽는다.
+ * (단일 가져오기 화면이 쓴다. 여러 문서가 필요한 화면은 parseDocuments 를 쓴다)
+ */
+function parseStructured(text, formName) {
+  const form = FORMS[formName];
+  const { lines, docs } = sliceDocuments(text);
+  const found = docs.find((d) => d.kind === formName);
 
-  if (hasOther) {
-    return `${other.label} 형식(${other.marker})을 붙여넣으셨습니다. 여기에는 ${form.label} 형식(${form.marker})이 필요합니다.`;
+  if (!found) {
+    return { ok: false, value: null, errors: [describeMissingMarker(docs, form)], warnings: [] };
+  }
+  return parseBody(found.bodyLines, form);
+}
+
+/**
+ * 여러 문서를 순서대로 읽는다.
+ *
+ * 하나라도 형식이 깨지면 전부 멈춘다. 절반만 반영하면 무엇이 들어갔고 무엇이
+ * 빠졌는지 알 수 없게 되고, 그 상태를 되돌릴 방법도 없다.
+ *
+ * @returns {{ ok, docs: Array<{kind, value, line}>, errors: string[], warnings: string[] }}
+ */
+export function parseDocuments(text) {
+  const { docs } = sliceDocuments(text);
+
+  if (docs.length === 0) {
+    return {
+      ok: false,
+      docs: [],
+      errors: [
+        `읽을 수 있는 형식이 없습니다. ${SUBJECT_MARKER} · ${BLOCK_MARKER} · ${ENTRY_MARKER} 중 하나로 시작하는 텍스트를 붙여넣어 주세요.`,
+      ],
+      warnings: [],
+    };
+  }
+
+  const out = [];
+  const errors = [];
+  const warnings = [];
+
+  for (const doc of docs) {
+    const parsed = parseBody(doc.bodyLines, FORMS[doc.kind]);
+    if (!parsed.ok) {
+      // 몇 번째 문서가 문제인지 알려주지 않으면 긴 텍스트에서 찾을 수가 없다.
+      errors.push(...parsed.errors.map((e) => `${doc.marker} (${doc.line}번째 줄): ${e}`));
+      continue;
+    }
+    warnings.push(...parsed.warnings);
+    out.push({ kind: doc.kind, line: doc.line, value: toValue(doc.kind, parsed.fields) });
+  }
+
+  return { ok: errors.length === 0, docs: out, errors, warnings };
+}
+
+/** 읽어낸 필드 맵을 화면이 쓰는 모양으로 */
+function toValue(kind, f) {
+  if (kind === 'blocklist') {
+    return { subjectName: f[K.SUBJECT], blockNames: splitBlockNames(f[K.BLOCKLIST]) };
+  }
+  if (kind === 'subject') {
+    return {
+      subjectName: f[K.SUBJECT],
+      description: f[K.DESCRIPTION],
+      diagramCode: f[K.DIAGRAM] ?? '',
+      svgCode: f[K.SVG] ?? '',
+    };
+  }
+  if (kind === 'block') {
+    return {
+      subjectName: f[K.SUBJECT],
+      blockName: f[K.BLOCK],
+      description: f[K.DESCRIPTION],
+      progressPercent: f[K.PROGRESS] ?? null,
+      diagramCode: f[K.DIAGRAM] ?? '',
+      svgCode: f[K.SVG] ?? '',
+    };
+  }
+  return {
+    date: f[K.DATE],
+    subjectName: f[K.SUBJECT],
+    blockName: f[K.BLOCK],
+    title: f[K.TITLE] ?? '',
+    tags: f[K.TAGS] ?? [],
+    content: f[K.CONTENT],
+    progressPercent: f[K.PROGRESS] ?? null,
+    diagramCode: f[K.DIAGRAM] ?? '',
+    svgCode: f[K.SVG] ?? '',
+  };
+}
+
+/** 시작 표시가 없을 때 — 다른 형식을 붙여넣은 경우를 따로 짚어준다 */
+function describeMissingMarker(docs, form) {
+  const other = docs.find((d) => FORMS[d.kind].marker !== form.marker);
+
+  if (other) {
+    const label = FORMS[other.kind].label;
+    return `${label} 형식(${FORMS[other.kind].marker})을 붙여넣으셨습니다. 여기에는 ${form.label} 형식(${form.marker})이 필요합니다.`;
   }
   return `${form.marker} 로 시작하는 텍스트가 없습니다. claude.ai 가 만들어 준 ${form.label} 형식 텍스트를 그대로 붙여넣어 주세요.`;
 }
@@ -370,65 +571,151 @@ function looseEqual(a, b) {
   return flat(a) === flat(b) && flat(a).length > 0;
 }
 
-// ─── 생성: 블록 정보 내보내기 ──────────────────────────────
+// ─── 생성: 내보내기 텍스트 ─────────────────────────────────
 
 /**
- * 블록 자체 정보를 ---BLOCK--- 형식으로 만든다.
+ * 문서 하나를 조립한다.
  *
- * "이 블록의 현재 상태는 이렇다, 갱신해 달라"고 claude.ai 에 넘기는 용도라
  * 가져오기와 **같은 형식**으로 낸다. 그래야 받은 답을 그대로 되붙일 수 있다.
+ * 값이 빈 항목은 아예 쓰지 않는다 — 본문에 "(없음)" 같은 자리표시자를 넣으면
+ * 그게 값으로 읽혀 되돌아온다.
  *
- * 비어 있는 항목은 본문에 넣지 않고 ---END--- **뒤에** 안내 한 줄로 적는다.
- * 본문 안에 "(없음)" 같은 자리표시자를 넣으면 그게 값으로 읽혀 되돌아온다.
+ * @param {Array<[string, any, ('line'|'block'|'fence')?]>} rows
  */
-export function buildBlockInfoText(subject, block) {
-  const lines = [BLOCK_MARKER];
-  lines.push(`${K.SUBJECT}: ${subject?.name ?? ''}`);
-  lines.push(`${K.BLOCK}: ${block?.name ?? ''}`);
-
+function emitDoc(marker, rows, { emptyNote = false } = {}) {
+  const lines = [marker];
   const empty = [];
-  const description = String(block?.description ?? '').trim();
-  if (description) {
-    lines.push('', `${K.DESCRIPTION}:`, description);
-  } else {
-    empty.push(K.DESCRIPTION);
-  }
+  let lastWasBlock = false;
 
-  if (block?.progressPercent != null) {
-    lines.push('', `${K.PROGRESS}: ${block.progressPercent}`);
-  } else {
-    empty.push(K.PROGRESS);
-  }
+  for (const [key, value, kind = 'line'] of rows) {
+    const text = value === null || value === undefined ? '' : String(value).trim();
+    if (text.length === 0) {
+      empty.push(key);
+      continue;
+    }
 
-  const diagram = String(block?.diagramCode ?? '').trim();
-  if (diagram) {
-    lines.push('', `${K.DIAGRAM}:`, '```mermaid', diagram, '```');
-  } else {
-    empty.push(K.DIAGRAM);
-  }
+    if (kind === 'line') {
+      // 여러 줄짜리 값 뒤에 붙는 한 줄 값은 한 칸 띄워야 눈으로 경계가 보인다
+      if (lastWasBlock) lines.push('');
+      lines.push(`${key}: ${text}`);
+      lastWasBlock = false;
+      continue;
+    }
 
-  const svg = String(block?.svgCode ?? '').trim();
-  if (svg) {
-    lines.push('', `${K.SVG}:`, svg);
-  } else {
-    empty.push(K.SVG);
+    lines.push('', `${key}:`);
+    if (kind === 'fence') lines.push('```mermaid', text, '```');
+    else lines.push(text);
+    lastWasBlock = true;
   }
 
   lines.push(END_MARKER);
 
-  if (empty.length > 0) {
+  // 비어 있는 항목은 ---END--- '뒤에' 적는다. 안쪽에 적으면 값으로 읽힌다.
+  if (emptyNote && empty.length > 0) {
     lines.push('', `(아직 비어 있는 항목: ${empty.join(', ')})`);
   }
-
-  return `${lines.join('\n')}\n`;
+  return lines.join('\n');
 }
 
-/** 내보내기 안내 문구용 요약 */
-export function summarizeBlockInfo(block) {
+/** 과목 자체 정보 → ---SUBJECT--- */
+export function buildSubjectInfoText(subject) {
+  return `${emitDoc(
+    SUBJECT_MARKER,
+    [
+      [K.SUBJECT, subject?.name],
+      [K.DESCRIPTION, subject?.description, 'block'],
+      [K.DIAGRAM, subject?.diagramCode, 'fence'],
+      [K.SVG, subject?.svgCode, 'block'],
+    ],
+    { emptyNote: true }
+  )}\n`;
+}
+
+/** 블록 자체 정보 → ---BLOCK--- */
+export function buildBlockInfoText(subject, block) {
+  return `${emitDoc(BLOCK_MARKER, blockRows(subject, block), { emptyNote: true })}\n`;
+}
+
+/** 기록 하나 → ---ENTRY--- */
+export function buildEntryText(subject, block, entry) {
+  return `${emitDoc(ENTRY_MARKER, entryRows(subject, block, entry))}\n`;
+}
+
+/**
+ * 블록의 기록 전체 → ---ENTRY--- 문서 여러 개.
+ *
+ * 예전에는 마커 없는 느슨한 형식으로 냈는데, 그 형식은 **되읽을 수가 없었다.**
+ * 내보낸 것을 claude.ai 가 고쳐서 돌려줘도 가져올 방법이 없으니 반쪽짜리였다.
+ */
+export function buildEntriesText(subject, block, entries) {
+  if (entries.length === 0) return '';
+  return `${entries.map((entry) => emitDoc(ENTRY_MARKER, entryRows(subject, block, entry))).join('\n\n')}\n`;
+}
+
+/**
+ * 과목 전체 → SUBJECT 하나 + (BLOCK + 그 블록의 ENTRY들) 반복.
+ *
+ * **요약본을 따로 보관하지 않는다.** 누를 때마다 지금의 블록·기록을 그대로 훑어
+ * 조립한다. 그래야 기록을 고치거나 지운 뒤에 내보내도 결과가 항상 현재와 같다.
+ *
+ * @param {Function} entriesOf blockId → 그 블록의 기록 배열 (selector 를 그대로 넘긴다)
+ */
+export function buildSubjectBundleText(subject, blocks, entriesOf) {
+  const parts = [
+    emitDoc(SUBJECT_MARKER, [
+      [K.SUBJECT, subject?.name],
+      [K.DESCRIPTION, subject?.description, 'block'],
+      [K.DIAGRAM, subject?.diagramCode, 'fence'],
+      [K.SVG, subject?.svgCode, 'block'],
+    ]),
+  ];
+
+  for (const block of blocks) {
+    parts.push(emitDoc(BLOCK_MARKER, blockRows(subject, block)));
+    for (const entry of entriesOf(block.id)) {
+      parts.push(emitDoc(ENTRY_MARKER, entryRows(subject, block, entry)));
+    }
+  }
+
+  return `${parts.join('\n\n')}\n`;
+}
+
+function blockRows(subject, block) {
+  return [
+    [K.SUBJECT, subject?.name],
+    [K.BLOCK, block?.name],
+    [K.DESCRIPTION, block?.description, 'block'],
+    [K.PROGRESS, block?.progressPercent],
+    [K.DIAGRAM, block?.diagramCode, 'fence'],
+    [K.SVG, block?.svgCode, 'block'],
+  ];
+}
+
+function entryRows(subject, block, entry) {
+  return [
+    [K.DATE, entry?.date],
+    [K.SUBJECT, subject?.name],
+    [K.BLOCK, block?.name],
+    [K.TITLE, entry?.title],
+    [K.TAGS, (entry?.tags ?? []).join(', ')],
+    [K.CONTENT, entry?.content, 'block'],
+    [K.PROGRESS, entry?.progressPercent],
+    [K.DIAGRAM, entry?.diagramCode, 'fence'],
+    [K.SVG, entry?.svgCode, 'block'],
+  ];
+}
+
+// ─── 안내 문구용 요약 ──────────────────────────────────────
+
+/** 어떤 항목이 채워져 있는지 (내보내기 알림에 쓴다) */
+export function summarizeSelfInfo(unit) {
   const parts = [];
-  if (String(block?.description ?? '').trim()) parts.push('설명');
-  if (block?.progressPercent != null) parts.push('진행률');
-  if (String(block?.diagramCode ?? '').trim()) parts.push('다이어그램');
-  if (String(block?.svgCode ?? '').trim()) parts.push('SVG');
+  if (String(unit?.description ?? '').trim()) parts.push('설명');
+  if (unit?.progressPercent != null) parts.push('진행률');
+  if (String(unit?.diagramCode ?? '').trim()) parts.push('다이어그램');
+  if (String(unit?.svgCode ?? '').trim()) parts.push('SVG');
   return parts.length > 0 ? parts.join(' · ') : '아직 채운 항목 없음';
 }
+
+/** 이전 이름 — 호출부 호환 */
+export const summarizeBlockInfo = summarizeSelfInfo;

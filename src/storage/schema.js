@@ -26,8 +26,16 @@ import { normalizeHex } from '../lib/color.js';
  *   - Entry.progressPercent  = 그 기록 시점의 진행률. 시간축으로 늘어놓아
  *     블록 상세의 진행률 추이 그래프를 그리는 데 쓴다.
  * 앞의 것은 '지금 어디쯤인가', 뒤의 것은 '어떻게 여기까지 왔나'를 답한다.
+ *
+ * v3 → v4: Subject 도 Block 과 같은 자체 정보(description/diagramCode/svgCode)를
+ * 갖는다. 계층 전체에서 '자기 자신 정보'와 '하위 전체'를 같은 방식으로 주고받기
+ * 위해서다.
+ *
+ * Subject 에는 progressPercent 를 두지 않는다. 과목 진도율은 이미
+ * '완료 블록 ÷ totalBlocks' 로 계산되는 값이고, 그 옆에 보관만 하는 숫자를
+ * 하나 더 두면 화면에 두 개의 진도율이 서로 다른 값을 가리키게 된다.
  */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 /** localStorage 메인 키 */
 export const STORAGE_KEY = 'learning-tracker:v1';
@@ -65,7 +73,15 @@ export function createInitialState() {
 
 // ─── 엔티티 팩토리 ─────────────────────────────────────────
 
-export function makeSubject({ name, totalBlocks = 0, colorHue = 0, customColor = null }) {
+export function makeSubject({
+  name,
+  totalBlocks = 0,
+  colorHue = 0,
+  customColor = null,
+  description = '',
+  diagramCode = null,
+  svgCode = null,
+}) {
   const now = nowIso();
   return {
     id: newId(),
@@ -73,6 +89,9 @@ export function makeSubject({ name, totalBlocks = 0, colorHue = 0, customColor =
     colorHue,
     customColor: normalizeCustomColor(customColor),
     totalBlocks: toNonNegativeInt(totalBlocks),
+    description: String(description ?? ''),
+    diagramCode: normalizeDiagram(diagramCode),
+    svgCode: normalizeSvg(svgCode),
     createdAt: now,
     updatedAt: now,
   };
@@ -229,6 +248,22 @@ const MIGRATIONS = {
    * 진행률을 0 이 아니라 null 로 채우는 게 중요하다 — 0 으로 채우면 예전 기록이
    * 전부 "진행률 0%"로 그래프에 찍혀 추이가 거짓이 된다.
    */
+  /** v3 → v4: Subject 에 자체 정보(설명·다이어그램·SVG) 추가 */
+  3: (state) => ({
+    ...state,
+    subjects: Object.fromEntries(
+      Object.entries(state.subjects ?? {}).map(([id, subject]) => [
+        id,
+        {
+          ...subject,
+          description: String(subject.description ?? ''),
+          diagramCode: normalizeDiagram(subject.diagramCode),
+          svgCode: normalizeSvg(subject.svgCode),
+        },
+      ])
+    ),
+  }),
+
   2: (state) => ({
     ...state,
     blocks: Object.fromEntries(

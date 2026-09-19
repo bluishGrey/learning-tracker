@@ -8,8 +8,10 @@ import DiagramEmbed from '../components/DiagramEmbed.jsx';
 import SvgEmbed from '../components/SvgEmbed.jsx';
 import SubjectDot from '../components/SubjectDot.jsx';
 import Sheet from '../components/Sheet.jsx';
+import ManualCopySheet, { useTextExport } from '../components/ManualCopySheet.jsx';
 import NotFound from './NotFound.jsx';
 import { entryTitle } from '../lib/entryTitle.js';
+import { buildEntryText } from '../lib/structuredText.js';
 import {
   formatFullDate,
   formatMonthDay,
@@ -31,6 +33,7 @@ export default function EntryView() {
   const navigate = useNavigate();
   const location = useLocation();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const { exportText, manualCopyProps } = useTextExport(actions.setNotice);
 
   const context = selectEntryContext(state, entryId);
   if (!context) return <NotFound />;
@@ -142,6 +145,24 @@ export default function EntryView() {
         >
           수정
         </Link>
+        {/*
+          이 기록 하나를 ---ENTRY--- 형식으로. claude.ai 에 "이거 이어서 더 정리해줘"
+          라고 할 때 현재 값을 그대로 넘기는 용도다.
+          받은 답은 '수정' 화면의 기록 가져오기로 되붙인다.
+        */}
+        <button
+          type="button"
+          className="btn"
+          onClick={() =>
+            exportText(
+              buildEntryText(subject, block, entry),
+              `'${title}' 기록을 클립보드에 복사했습니다.`
+            )
+          }
+          title="이 기록을 ---ENTRY--- 형식으로 클립보드에 복사"
+        >
+          ⧉ 기록 내보내기
+        </button>
         <button type="button" className="btn btn--danger" onClick={() => setConfirmDelete(true)}>
           삭제
         </button>
@@ -167,6 +188,8 @@ export default function EntryView() {
           <p>되돌릴 수 없습니다.</p>
         </div>
       </Sheet>
+
+      <ManualCopySheet {...manualCopyProps} />
     </main>
   );
 }
