@@ -1894,3 +1894,136 @@
   color: var(--text);
   font-weight: 600;
 }
+
+/* ═══ 단축키 ═══════════════════════════════════════════════ */
+
+.sidebar__help {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  width: 100%;
+  margin-top: var(--sp-2);
+  padding: var(--sp-1) 0;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+
+.sidebar__help:hover {
+  color: var(--text-dim);
+}
+
+.kbd {
+  display: inline-block;
+  min-width: 1.5em;
+  padding: 1px 5px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 0.72em;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.shortcuts {
+  margin: 0;
+}
+
+.shortcuts__row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-top: 1px solid var(--border);
+}
+
+.shortcuts__row:first-child {
+  border-top: none;
+}
+
+.shortcuts__keys {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 8.5em;
+}
+
+.shortcuts__label {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+/* 왜 그 조합인지 같은 부연은 한 단 낮춰 둔다 */
+.shortcuts__note {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.74rem;
+  color: var(--text-faint);
+  line-height: 1.5;
+}
+
+.shortcuts__foot {
+  margin-top: var(--sp-4);
+  line-height: 1.6;
+}
+
+/* ═══ 그림 확대 ═══════════════════════════════════════════ */
+
+.figure__expand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-dim);
+  cursor: pointer;
+  flex: none;
+}
+
+.figure__expand:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+/*
+ * 확대 창은 화면을 거의 다 쓴다. 그림을 크게 보려고 연 창이 작으면
+ * 연 의미가 없다.
+ */
+.sheet__panel--wide {
+  max-width: min(1100px, 96vw);
+  max-height: 94dvh;
+}
+
+.sheet__panel--wide .svg-embed {
+  min-height: 40dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/*
+ * 확대 창 안에서는 그림이 들어갈 수 있는 만큼 커진다.
+ *
+ * max-width 를 !important 로 덮는 이유: mermaid 는 useMaxWidth 옵션에 따라
+ * 그린 SVG 에 `style="max-width: 168px"` 처럼 **인라인으로** 자연 크기를 박아
+ * 둔다. 그대로 두면 창만 커지고 그림은 그대로라 확대가 아무 일도 하지 않는다.
+ *
+ * width 100% + height auto 로 폭에 맞춰 늘리고, 세로로 넘치면 max-height 가
+ * 잡아 준다 (viewBox 가 있으니 비율은 알아서 유지된다).
+ */
+.sheet__panel--wide .diagram-embed svg,
+.sheet__panel--wide .svg-embed svg {
+  width: 100%;
+  height: auto;
+  max-width: none !important;
+  max-height: 76dvh;
+}

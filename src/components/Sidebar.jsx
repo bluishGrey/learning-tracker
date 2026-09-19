@@ -20,7 +20,7 @@ import { todayKey, monthKeyOf, formatMonthDay } from '../lib/date.js';
  * 계층이 듬성듬성 남아 오히려 읽기 어렵고, 기록이 어느 블록 소속인지 보이지 않는다.
  * 결과 목록에는 소속 경로를 문장으로 붙여 준다.
  */
-export default function Sidebar({ open, onNavigate }) {
+export default function Sidebar({ open, onNavigate, searchRef, onOpenHelp }) {
   const { state, index } = useStore();
   const location = useLocation();
 
@@ -79,11 +79,12 @@ export default function Sidebar({ open, onNavigate }) {
 
       <div className="sidebar__search">
         <input
+          ref={searchRef}
           type="search"
           className="input input--sm"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="과목 · 블록 · 기록 검색"
+          placeholder="과목 · 블록 · 기록 검색  ( / )"
           aria-label="검색"
         />
         {query.trim() && (
@@ -122,6 +123,10 @@ export default function Sidebar({ open, onNavigate }) {
       */}
       <div className="sidebar__footer">
         <ThemeToggle />
+        <button type="button" className="sidebar__help" onClick={onOpenHelp}>
+          단축키 안내
+          <kbd className="kbd">?</kbd>
+        </button>
       </div>
     </aside>
   );

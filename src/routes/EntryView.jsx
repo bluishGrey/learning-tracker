@@ -4,8 +4,7 @@ import { useStore, useActions } from '../state/StoreContext.jsx';
 import { selectEntryContext } from '../state/selectors.js';
 import Breadcrumb from '../components/Breadcrumb.jsx';
 import Markdown from '../components/Markdown.jsx';
-import DiagramEmbed from '../components/DiagramEmbed.jsx';
-import SvgEmbed from '../components/SvgEmbed.jsx';
+import FigureSection from '../components/FigureSection.jsx';
 import SubjectDot from '../components/SubjectDot.jsx';
 import Sheet from '../components/Sheet.jsx';
 import ManualCopySheet, { useTextExport } from '../components/ManualCopySheet.jsx';
@@ -122,20 +121,9 @@ export default function EntryView() {
         )}
       </article>
 
-      {/* 다이어그램이 위, SVG 가 아래 — 블록 상세와 같은 순서로 둔다 */}
-      {entry.diagramCode && (
-        <section className="section">
-          <h2 className="section__title">다이어그램</h2>
-          <DiagramEmbed code={entry.diagramCode} />
-        </section>
-      )}
-
-      {entry.svgCode && (
-        <section className="section">
-          <h2 className="section__title">참고 SVG</h2>
-          <SvgEmbed code={entry.svgCode} />
-        </section>
-      )}
+      {/* 다이어그램이 위, SVG 가 아래 — 블록·과목 상세와 같은 순서로 둔다 */}
+      <FigureSection title="다이어그램" kind="diagram" code={entry.diagramCode} />
+      <FigureSection title="참고 SVG" kind="svg" code={entry.svgCode} />
 
       <div className="row entryview__actions">
         {/* 지금 경로를 실어 보내 저장 후 있던 자리로 정확히 돌아오게 한다 */}

@@ -37,7 +37,7 @@ import { useEffect, useRef } from 'react';
  * 버튼은 일부러 후보에서 뺐다. 삭제 확인 시트처럼 입력칸이 없는 시트에서
  * 파괴적인 버튼에 포커스가 얹히면 엔터 한 번에 사고가 난다.
  */
-export default function Sheet({ open, title, onClose, children, footer }) {
+export default function Sheet({ open, title, onClose, children, footer, wide = false }) {
   const panelRef = useRef(null);
 
   // 콜백은 최신값만 읽는다 — 의존성에 넣지 않기 위함이다.
@@ -77,7 +77,7 @@ export default function Sheet({ open, title, onClose, children, footer }) {
   return (
     <div className="sheet" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
       <div
-        className="sheet__panel"
+        className={`sheet__panel${wide ? ' sheet__panel--wide' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
