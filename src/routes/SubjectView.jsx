@@ -26,14 +26,12 @@ import NotFound from './NotFound.jsx';
 import { activityAlpha } from '../lib/color.js';
 import { formatRelativeDay } from '../lib/date.js';
 import {
-  parseSubjectText,
-  parseBlockListText,
   parseDocuments,
   buildSubjectInfoText,
   buildSubjectBundleText,
   summarizeSelfInfo,
 } from '../lib/structuredText.js';
-import { planSubjectImport, planBlockListImport, describePlan } from '../lib/importPlan.js';
+import { planSubjectImport, describePlan } from '../lib/importPlan.js';
 
 /** 과목 상세에 함께 보여줄 최근 기록 수 — 목록 화면이 되지 않을 만큼만 */
 const RECENT_LIMIT = 8;
@@ -41,10 +39,13 @@ const RECENT_LIMIT = 8;
 /**
  * 경로 B의 두 번째 단계 — 과목 하나.
  *
- * 주고받기가 세 갈래다. 라벨만으로 구분되게 묶어 둔다.
- *   - **과목 정보** — 이 과목 자체의 설명·다이어그램·SVG
+ * 주고받기는 두 갈래다. 라벨만으로 구분되게 묶어 둔다.
+ *   - **과목 정보** — 이 과목 자체의 설명·다이어그램·SVG, 그리고 블록 목록
  *   - **과목 전체** — 그 아래 블록과 기록 전부
- *   - **블록 목록** — 이름만 나열된 커리큘럼 뼈대 (가져오기만)
+ *
+ * 블록 목록이 '과목 정보' 안에 있는 이유: 과목 설정 화면에 설명·색·다이어그램이
+ * 이미 모여 있는데 블록 목록만 따로 주고받을 이유가 없다. 목록은 선택 항목이라
+ * 적지 않으면 블록을 건드리지 않는다.
  */
 export default function SubjectView() {
   const { subjectId } = useParams();
@@ -56,7 +57,7 @@ export default function SubjectView() {
   const [blockName, setBlockName] = useState('');
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [importing, setImporting] = useState(null); // 'info' | 'bundle' | 'blocklist'
+  const [importing, setImporting] = useState(null); // 'info' | 'bundle'
 
   const { exportText, manualCopyProps } = useTextExport(actions.setNotice);
 
@@ -88,8 +89,9 @@ export default function SubjectView() {
    */
   const exportInfo = () =>
     exportText(
-      buildSubjectInfoText(subject),
-      `${subject.name} 과목 정보를 복사했습니다. (${summarizeSelfInfo(subject)})`
+      // 블록 목록은 저장된 사본이 아니라 지금의 블록들이다
+      buildSubjectInfoText(subject, selectBlocks(index, subjectId)),
+      `${subject.name} 과목 정보를 복사했습니다. (${summarizeSelfInfo(subject)} · 블록 ${blocks.length}개)`
     );
 
   const exportBundle = () =>
@@ -100,21 +102,32 @@ export default function SubjectView() {
       `${subject.name} 전체를 복사했습니다. (블록 ${blocks.length}개 · 기록 ${entryTotal}개)`
     );
 
-  // ─ 가져오기: 읽기 단계에서 대상이 이 과목인지까지 확인한다 ─
+  /**
+   * 과목 정보 가져오기.
+   *
+   * 블록 목록을 품게 되면서 이 경로도 블록을 만들 수 있다. 그래서 단순 갱신이
+   * 아니라 과목 전체와 **같은 계획기**를 거친다 — 몇 개가 생기는지 먼저 보여주고
+   * 누르게 하려면 계획이 필요하다.
+   */
   const readInfo = (text) => {
-    const parsed = parseSubjectText(text);
-    if (!parsed.ok) return parsed;
-    const want = String(parsed.value.subjectName ?? '').trim();
-    if (want !== String(subject.name).trim()) {
+    const parsed = parseDocuments(text);
+    if (!parsed.ok) return { ok: false, value: null, errors: parsed.errors, warnings: [] };
+
+    const others = parsed.docs.filter((d) => d.kind !== 'subject');
+    if (others.length > 0) {
       return {
-        ...parsed,
         ok: false,
+        value: null,
         errors: [
-          `이 텍스트는 '${want}' 과목의 정보입니다. 지금 보고 있는 '${subject.name}' 에는 반영할 수 없습니다.`,
+          `과목 정보(---SUBJECT---) 만 가져올 수 있습니다. 블록·기록이 함께 들어 있다면 '과목 전체 가져오기' 를 쓰세요.`,
         ],
+        warnings: [],
       };
     }
-    return parsed;
+
+    const planned = planSubjectImport(state, parsed.docs, { subjectId });
+    if (!planned.ok) return { ok: false, value: null, errors: planned.errors, warnings: [] };
+    return { ok: true, value: planned, errors: [], warnings: parsed.warnings };
   };
 
   const readBundle = (text) => {
@@ -124,24 +137,6 @@ export default function SubjectView() {
     const planned = planSubjectImport(state, parsed.docs, { subjectId });
     if (!planned.ok) return { ok: false, value: null, errors: planned.errors, warnings: [] };
     return { ok: true, value: planned, errors: [], warnings: parsed.warnings };
-  };
-
-  const readBlockList = (text) => {
-    const parsed = parseBlockListText(text);
-    if (!parsed.ok) return parsed;
-
-    const planned = planBlockListImport(state, parsed.value, { subjectId });
-    if (!planned.ok) return { ...parsed, ok: false, errors: planned.errors };
-    return { ok: true, value: planned, errors: [], warnings: parsed.warnings };
-  };
-
-  const applyInfo = (value) => {
-    actions.updateSubject(subjectId, {
-      description: value.description,
-      diagramCode: value.diagramCode,
-      svgCode: value.svgCode,
-    });
-    actions.setNotice({ level: 'success', message: `${subject.name} 과목 정보를 갱신했습니다.` });
   };
 
   const applyPlan = (planned) => {
@@ -168,17 +163,10 @@ export default function SubjectView() {
       <p className="page__sub subjecthead__stats">
         {progress.hasTarget
           ? `${progress.percent}% · ${progress.completed} / ${progress.total} 블록 완료`
-          : '전체 진도 단위 수가 설정되지 않았습니다'}
+          : '블록이 없습니다'}
         {' · '}
         기록 {entryTotal}개 · {lastActive ? formatRelativeDay(lastActive) : '기록 없음'}
       </p>
-
-      {progress.overflow && (
-        <div className="callout callout--warn">
-          만든 블록({progress.created})이 설정한 전체 진도 단위({progress.total})보다 많습니다. 진도율은
-          100%에서 멈춥니다.
-        </div>
-      )}
 
       <div className="row subjecthead__actions">
         <button type="button" className="btn btn--primary" onClick={() => setAddingBlock(true)}>
@@ -193,7 +181,7 @@ export default function SubjectView() {
         groups={[
           {
             label: '이 과목 정보',
-            hint: '설명 · 다이어그램 · SVG',
+            hint: '설명 · 블록 목록 · 다이어그램 · SVG',
             actions: [
               { kind: 'export', label: '과목 정보 내보내기', onClick: exportInfo },
               { kind: 'import', label: '과목 정보 가져오기', onClick: () => setImporting('info') },
@@ -211,13 +199,6 @@ export default function SubjectView() {
                 title: blocks.length === 0 ? '내보낼 블록이 없습니다' : undefined,
               },
               { kind: 'import', label: '과목 전체 가져오기', onClick: () => setImporting('bundle') },
-            ],
-          },
-          {
-            label: '블록 목록',
-            hint: '이름만 나열된 뼈대',
-            actions: [
-              { kind: 'import', label: '블록 목록 가져오기', onClick: () => setImporting('blocklist') },
             ],
           },
         ]}
@@ -290,20 +271,12 @@ export default function SubjectView() {
         open={importing === 'info'}
         onClose={() => setImporting(null)}
         title="과목 정보 가져오기"
-        hint={`claude.ai 가 만들어 준 ---SUBJECT--- 형식 텍스트를 붙여넣으세요. '${subject.name}' 의 설명·다이어그램·SVG 를 덮어씁니다.`}
-        placeholder={`---SUBJECT---\n과목: ${subject.name}\n\n설명:\n…\n---END---`}
+        hint={`claude.ai 가 만들어 준 ---SUBJECT--- 형식 텍스트를 붙여넣으세요. '${subject.name}' 의 설명·다이어그램·SVG 를 덮어쓰고, '블록 목록' 이 적혀 있으면 없는 블록을 만듭니다. (이미 있는 이름은 건드리지 않습니다)`}
+        placeholder={`---SUBJECT---\n과목: ${subject.name}\n\n설명:\n…\n\n블록 목록:\nWeek 0\nWeek 1\n---END---`}
         parse={readInfo}
         applyLabel="과목 정보 갱신"
-        onApply={applyInfo}
-        renderPreview={(value) => (
-          <FieldSummary
-            rows={[
-              ['설명', `${value.description.split('\n').length}줄`],
-              ['다이어그램', value.diagramCode ? `${value.diagramCode.split('\n').length}줄` : '없음 (지움)'],
-              ['SVG', value.svgCode ? `${value.svgCode.length}자` : '없음 (지움)'],
-            ]}
-          />
-        )}
+        onApply={applyPlan}
+        renderPreview={(planned) => <PlanSummary planned={planned} />}
       />
 
       <PasteImportSheet
@@ -314,18 +287,6 @@ export default function SubjectView() {
         placeholder={`---SUBJECT---\n과목: ${subject.name}\n…\n---END---\n\n---BLOCK---\n…\n---END---\n\n---ENTRY---\n…\n---END---`}
         parse={readBundle}
         applyLabel="전체 반영"
-        onApply={applyPlan}
-        renderPreview={(planned) => <PlanSummary planned={planned} />}
-      />
-
-      <PasteImportSheet
-        open={importing === 'blocklist'}
-        onClose={() => setImporting(null)}
-        title="블록 목록 가져오기"
-        hint="블록 이름만 한 줄에 하나씩 적힌 ---BLOCKLIST--- 텍스트를 붙여넣으세요. 이미 있는 이름은 건너뜁니다."
-        placeholder={`---BLOCKLIST---\n과목: ${subject.name}\n\n블록 목록:\nWeek 0\nWeek 1\nWeek 2\n---END---`}
-        parse={readBlockList}
-        applyLabel="블록 만들기"
         onApply={applyPlan}
         renderPreview={(planned) => <PlanSummary planned={planned} />}
       />
@@ -364,8 +325,8 @@ export default function SubjectView() {
               placeholder="예: Week 5"
             />
             <p className="field__hint">
-              완료 체크는 블록 목록에서 직접 토글합니다. 여러 개를 한 번에 만들려면 위의
-              <strong> 블록 목록 가져오기</strong> 를 쓰세요.
+              완료 체크는 블록 목록에서 직접 토글합니다. 여러 개를 한 번에 만들려면
+              <strong> 과목 정보 가져오기</strong> 의 &quot;블록 목록&quot; 을 쓰세요.
             </p>
           </div>
         </form>
@@ -375,6 +336,7 @@ export default function SubjectView() {
       <SubjectSettings
         open={editing}
         subject={subject}
+        blockCount={blocks.length}
         onClose={() => setEditing(false)}
         onSave={(patch) => {
           actions.updateSubject(subjectId, patch);
@@ -462,7 +424,7 @@ function PlanSummary({ planned }) {
   );
 }
 
-function SubjectSettings({ open, subject, onClose, onSave, onRequestDelete }) {
+function SubjectSettings({ open, subject, blockCount, onClose, onSave, onRequestDelete }) {
   const [form, setForm] = useState(() => toForm(subject));
   const [preview, setPreview] = useState({ diagram: false, svg: false });
 
@@ -495,7 +457,6 @@ function SubjectSettings({ open, subject, onClose, onSave, onRequestDelete }) {
             onClick={() =>
               onSave({
                 name: form.name,
-                totalBlocks: Number(form.totalBlocks) || 0,
                 customColor: form.customColor,
                 description: form.description,
                 diagramCode: form.diagramCode,
@@ -521,19 +482,12 @@ function SubjectSettings({ open, subject, onClose, onSave, onRequestDelete }) {
       </div>
 
       <div className="field">
-        <label className="field__label" htmlFor="subject-edit-total">
-          전체 진도 단위 수
-        </label>
-        <input
-          id="subject-edit-total"
-          className="input"
-          type="number"
-          inputMode="numeric"
-          min="0"
-          value={form.totalBlocks}
-          onChange={(e) => patch({ totalBlocks: e.target.value })}
-        />
-        <p className="field__hint">진도율의 분모입니다. 0이면 진도율을 표시하지 않습니다.</p>
+        <span className="field__label">진도율</span>
+        <p className="field__hint">
+          지금 블록 {blockCount}개가 분모입니다. 따로 입력하지 않습니다 — 블록을 만들거나
+          지우면 분모도 같이 움직입니다. 커리큘럼 전체를 미리 세우려면
+          <strong> 과목 정보 가져오기</strong> 의 &quot;블록 목록&quot; 으로 한 번에 만드세요.
+        </p>
       </div>
 
       <div className="field">
@@ -622,7 +576,6 @@ function SubjectSettings({ open, subject, onClose, onSave, onRequestDelete }) {
 function toForm(subject) {
   return {
     name: subject.name ?? '',
-    totalBlocks: String(subject.totalBlocks ?? 0),
     customColor: subject.customColor ?? null,
     description: subject.description ?? '',
     diagramCode: subject.diagramCode ?? '',

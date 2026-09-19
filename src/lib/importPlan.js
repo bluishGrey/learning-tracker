@@ -146,6 +146,38 @@ export function planSubjectImport(state, docs, { subjectId }) {
     }
   }
 
+  /*
+   * 과목 정보에 적힌 블록 목록 — 이름뿐인 뼈대다.
+   *
+   * BLOCK 문서를 **먼저** 처리한 뒤에 본다. 같은 이름이 양쪽에 다 있으면
+   * 설명·진행률까지 실린 BLOCK 문서 쪽이 이겨야 하기 때문이다. 목록은
+   * 그러고도 남은 이름만 만든다.
+   *
+   * 이미 트래커에 있는 이름은 건너뛰고 결과에 적는다 — 이름만 담긴 목록으로
+   * 기존 블록의 설명·진행률을 덮어쓰면 안 된다.
+   */
+  const skipped = [];
+  const listedNames = subjectDocs[0]?.value.blockNames ?? null;
+
+  if (listedNames) {
+    for (const name of listedNames) {
+      if (existingBlocks.has(name)) {
+        skipped.push(name);
+        continue;
+      }
+      if (blockIdByName.has(name)) continue; // 이번 텍스트의 BLOCK 문서가 이미 맡았다
+
+      const id = newId();
+      blockIdByName.set(name, id);
+      blocks.push({
+        id,
+        name,
+        patch: { description: '', progressPercent: null, diagramCode: '', svgCode: '' },
+        isNew: true,
+      });
+    }
+  }
+
   // ─ 기록: 이름으로 소속 블록을 찾는다 (문서 순서가 아니라 적힌 이름 기준) ─
   const entryDocs = docs.filter((d) => d.kind === 'entry');
   for (const doc of entryDocs) {
@@ -162,57 +194,7 @@ export function planSubjectImport(state, docs, { subjectId }) {
     blockIdByName.get(String(doc.value.blockName ?? '').trim())
   );
 
-  return done({ subjectId, subjectPatch, blocks, entries });
-}
-
-/**
- * 블록 목록만 한 번에 — 과목 상세의 '블록 목록 가져오기'.
- *
- * 커리큘럼 뼈대를 세우는 용도다. 이미 있는 이름은 **건너뛰고 결과에 적는다** —
- * 이름만 담긴 목록으로 기존 블록의 설명·진행률을 덮어쓰면 안 된다.
- */
-export function planBlockListImport(state, value, { subjectId }) {
-  const subject = state.subjects[subjectId];
-  if (!subject) return fail(['가져올 대상 과목을 찾을 수 없습니다.']);
-
-  const want = String(value.subjectName ?? '').trim();
-  if (want !== String(subject.name).trim()) {
-    return fail([
-      `이 목록은 '${want}' 과목의 것입니다. 지금 보고 있는 '${subject.name}' 에는 넣을 수 없습니다.`,
-    ]);
-  }
-
-  const existing = new Set(
-    Object.values(state.blocks)
-      .filter((b) => b.subjectId === subjectId)
-      .map((b) => String(b.name ?? '').trim())
-  );
-
-  const blocks = [];
-  const skipped = [];
-
-  for (const name of value.blockNames) {
-    if (existing.has(name)) {
-      skipped.push(name);
-      continue;
-    }
-    existing.add(name);
-    blocks.push({
-      id: newId(),
-      name,
-      // 이름만 있는 목록이므로 나머지는 빈 값으로 만든다
-      patch: { description: '', progressPercent: null, diagramCode: '', svgCode: '' },
-      isNew: true,
-    });
-  }
-
-  if (blocks.length === 0) {
-    return fail([
-      `적힌 블록 ${skipped.length}개가 모두 이미 있습니다. 새로 만들 것이 없습니다.`,
-    ]);
-  }
-
-  return done({ subjectId, subjectPatch: null, blocks, entries: [] }, { skipped });
+  return done({ subjectId, subjectPatch, blocks, entries }, { skipped });
 }
 
 // ─── 내부 ──────────────────────────────────────────────────

@@ -16,7 +16,6 @@ import {
   normalizeDiagram,
   normalizePercent,
   normalizeCustomColor,
-  toNonNegativeInt,
   createInitialState,
 } from '../storage/schema.js';
 import { nextFreeHueIndex } from '../lib/color.js';
@@ -51,7 +50,7 @@ export function reducer(state, action) {
   switch (action.type) {
     // ─── Subject ───────────────────────────────────────────
     case ACTIONS.SUBJECT_ADD: {
-      const { id, name, totalBlocks, customColor, description, diagramCode, svgCode } = action;
+      const { id, name, customColor, description, diagramCode, svgCode } = action;
 
       // 이미 쓰이는 색과 겹치지 않는 다음 순번을 고른다.
       // (백업 병합으로 순번이 건너뛰어졌을 수 있으므로 커서만 믿지 않는다)
@@ -73,7 +72,6 @@ export function reducer(state, action) {
             // 골든 앵글 순서와 색 충돌 판정이 계속 이 값으로만 이뤄지기 때문이다.
             colorHue: hue,
             customColor: normalizeCustomColor(customColor),
-            totalBlocks: toNonNegativeInt(totalBlocks),
             description: String(description ?? ''),
             diagramCode: normalizeDiagram(diagramCode),
             svgCode: normalizeSvg(svgCode),
@@ -90,9 +88,6 @@ export function reducer(state, action) {
       if (!current) return state;
       const patch = {};
       if (action.patch.name !== undefined) patch.name = String(action.patch.name).trim();
-      if (action.patch.totalBlocks !== undefined) {
-        patch.totalBlocks = toNonNegativeInt(action.patch.totalBlocks);
-      }
       // null 을 넘기면 자동 배정 색으로 되돌아간다.
       if (action.patch.customColor !== undefined) {
         patch.customColor = normalizeCustomColor(action.patch.customColor);

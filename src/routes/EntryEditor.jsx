@@ -100,7 +100,7 @@ export default function EntryEditor() {
   const createSubject = () => {
     const name = newSubjectName.trim();
     if (!name) return;
-    const id = actions.addSubject({ name, totalBlocks: 0 });
+    const id = actions.addSubject({ name });
     patch({ subjectId: id, blockId: '' });
     setNewSubjectName('');
     setAddingBlock(true);

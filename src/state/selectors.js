@@ -71,25 +71,26 @@ export function buildIndex(state) {
 // ─── Subject ───────────────────────────────────────────────
 
 /**
- * 진도율 = 완료한 Block 수 ÷ totalBlocks.
- * totalBlocks 는 사용자가 직접 입력한 '전체 커리큘럼 기준' 값이라
- * 실제 만든 Block 수와 다를 수 있다. 그 경우를 플래그로 알려준다.
+ * 진도율 = 완료한 Block 수 ÷ 그 과목의 Block 수.
+ *
+ * 분모를 따로 보관하지 않고 **매번 센다.** 예전에는 사용자가 '전체 진도 단위 수'를
+ * 입력해 두고 그것을 분모로 썼는데, 블록을 더 만들거나 지우면 그 값과 실제가
+ * 어긋나 진도율이 거짓이 됐다. 셀 수 있는 값을 저장해 두면 반드시 어긋난다.
+ *
+ * 커리큘럼 전체를 미리 세워 두고 싶으면 과목 정보의 '블록 목록'으로 한 번에
+ * 만들면 된다 — 그러면 분모가 곧 전체 커리큘럼이 된다.
  */
 export function selectProgress(state, index, subjectId) {
-  const subject = state.subjects[subjectId];
   const blocks = index.blocksBySubject.get(subjectId) ?? [];
   const completed = blocks.filter((b) => b.isCompleted).length;
-  const total = subject?.totalBlocks ?? 0;
+  const total = blocks.length;
 
   return {
     completed,
     total,
-    created: blocks.length,
+    /** 블록이 하나도 없으면 진도율을 말할 수 없다 */
     hasTarget: total > 0,
-    /** 목표를 정하지 않았으면 0% */
-    percent: total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0,
-    /** 실제 Block 수가 목표를 넘었으면 경고 표시용 */
-    overflow: total > 0 && blocks.length > total,
+    percent: total > 0 ? Math.round((completed / total) * 100) : 0,
   };
 }
 

@@ -31,11 +31,17 @@ import { normalizeHex } from '../lib/color.js';
  * 갖는다. 계층 전체에서 '자기 자신 정보'와 '하위 전체'를 같은 방식으로 주고받기
  * 위해서다.
  *
- * Subject 에는 progressPercent 를 두지 않는다. 과목 진도율은 이미
- * '완료 블록 ÷ totalBlocks' 로 계산되는 값이고, 그 옆에 보관만 하는 숫자를
- * 하나 더 두면 화면에 두 개의 진도율이 서로 다른 값을 가리키게 된다.
+ * Subject 에는 progressPercent 를 두지 않는다. 과목 진도율은 계산되는 값이고,
+ * 그 옆에 보관만 하는 숫자를 하나 더 두면 화면에 두 개의 진도율이 서로 다른
+ * 값을 가리키게 된다.
+ *
+ * v4 → v5: Subject.totalBlocks 를 **없앴다.**
+ *
+ * 진도율의 분모였는데, 사용자가 따로 입력해 두는 값이라 실제 블록 개수와
+ * 언제든 어긋날 수 있었다. 분모는 그 과목에 실제로 속한 블록을 세면 나오는
+ * 값이므로, 보관하지 않고 매번 센다. 기존에 저장된 값은 버린다.
  */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 /** localStorage 메인 키 */
 export const STORAGE_KEY = 'learning-tracker:v1';
@@ -75,7 +81,6 @@ export function createInitialState() {
 
 export function makeSubject({
   name,
-  totalBlocks = 0,
   colorHue = 0,
   customColor = null,
   description = '',
@@ -88,7 +93,6 @@ export function makeSubject({
     name: String(name ?? '').trim(),
     colorHue,
     customColor: normalizeCustomColor(customColor),
-    totalBlocks: toNonNegativeInt(totalBlocks),
     description: String(description ?? ''),
     diagramCode: normalizeDiagram(diagramCode),
     svgCode: normalizeSvg(svgCode),
@@ -217,11 +221,6 @@ function trimToNull(value) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-export function toNonNegativeInt(value) {
-  const n = Math.trunc(Number(value));
-  return Number.isFinite(n) && n > 0 ? n : 0;
-}
-
 // ─── 마이그레이션 ──────────────────────────────────────────
 
 /**
@@ -248,6 +247,20 @@ const MIGRATIONS = {
    * 진행률을 0 이 아니라 null 로 채우는 게 중요하다 — 0 으로 채우면 예전 기록이
    * 전부 "진행률 0%"로 그래프에 찍혀 추이가 거짓이 된다.
    */
+  /**
+   * v4 → v5: Subject.totalBlocks 제거.
+   * 진도율의 분모는 이제 실제 블록 개수를 세어 구한다 (selectProgress).
+   */
+  4: (state) => ({
+    ...state,
+    subjects: Object.fromEntries(
+      Object.entries(state.subjects ?? {}).map(([id, subject]) => {
+        const { totalBlocks: _dropped, ...rest } = subject;
+        return [id, rest];
+      })
+    ),
+  }),
+
   /** v3 → v4: Subject 에 자체 정보(설명·다이어그램·SVG) 추가 */
   3: (state) => ({
     ...state,

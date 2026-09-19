@@ -15,7 +15,6 @@ export default function SubjectListView() {
 
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
-  const [totalBlocks, setTotalBlocks] = useState('');
   const [customColor, setCustomColor] = useState(null);
 
   const rows = selectSubjectList(state, index);
@@ -26,14 +25,9 @@ export default function SubjectListView() {
     event.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) return;
-    const id = actions.addSubject({
-      name: trimmed,
-      totalBlocks: Number(totalBlocks) || 0,
-      customColor,
-    });
+    const id = actions.addSubject({ name: trimmed, customColor });
     setAdding(false);
     setName('');
-    setTotalBlocks('');
     setCustomColor(null);
     navigate(`/subjects/${id}`);
   };
@@ -44,7 +38,7 @@ export default function SubjectListView() {
 
       <h1 className="page__title">과목</h1>
       <p className="page__sub">
-        진도율 = 완료한 블록 ÷ 전체 진도 단위. 색이 흐릴수록 오래 손대지 않은 과목입니다.
+        진도율 = 완료한 블록 ÷ 그 과목의 블록 수. 색이 흐릴수록 오래 손대지 않은 과목입니다.
       </p>
 
       <button type="button" className="btn btn--primary btn--block" onClick={() => setAdding(true)}>
@@ -103,21 +97,8 @@ export default function SubjectListView() {
           </div>
 
           <div className="field">
-            <label className="field__label" htmlFor="subject-total">
-              전체 진도 단위 수
-            </label>
-            <input
-              id="subject-total"
-              className="input"
-              type="number"
-              inputMode="numeric"
-              min="0"
-              value={totalBlocks}
-              onChange={(e) => setTotalBlocks(e.target.value)}
-              placeholder="예: 11"
-            />
             <p className="field__hint">
-              전체 커리큘럼 기준 총 개수입니다. 진도율 계산의 분모가 됩니다. 나중에 바꿀 수 있습니다.
+              진도율은 이 과목의 블록 개수로 자동 계산됩니다. 따로 입력할 값이 없습니다.
             </p>
           </div>
 

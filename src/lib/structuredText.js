@@ -28,7 +28,6 @@
 import { isValidDateKey } from './date.js';
 
 export const SUBJECT_MARKER = '---SUBJECT---';
-export const BLOCKLIST_MARKER = '---BLOCKLIST---';
 export const ENTRY_MARKER = '---ENTRY---';
 export const BLOCK_MARKER = '---BLOCK---';
 export const END_MARKER = '---END---';
@@ -51,16 +50,19 @@ const K = {
 const SINGLE_LINE = new Set([K.DATE, K.SUBJECT, K.BLOCK, K.TITLE, K.TAGS, K.PROGRESS]);
 
 const FORMS = {
-  blocklist: {
-    marker: BLOCKLIST_MARKER,
-    label: '블록 목록',
-    fields: [K.SUBJECT, K.BLOCKLIST],
-    required: [K.SUBJECT, K.BLOCKLIST],
-  },
+  /**
+   * 과목 정보. '블록 목록'을 품고 있다 — 예전에는 ---BLOCKLIST--- 라는 별도
+   * 형식이었는데, 과목 설정 화면에 설명·색·다이어그램이 이미 모여 있는 마당에
+   * 블록 목록만 따로 주고받을 이유가 없었다. claude.ai 쪽에서도 "이 과목은 이렇다"를
+   * 한 문서로 정리해 보내는 편이 자연스럽다.
+   *
+   * 블록 목록은 **선택**이다. 설명만 고치고 싶을 때 목록을 적지 않으면
+   * 블록은 하나도 건드리지 않는다.
+   */
   subject: {
     marker: SUBJECT_MARKER,
     label: '과목 정보',
-    fields: [K.SUBJECT, K.DESCRIPTION, K.DIAGRAM, K.SVG],
+    fields: [K.SUBJECT, K.DESCRIPTION, K.BLOCKLIST, K.DIAGRAM, K.SVG],
     required: [K.SUBJECT, K.DESCRIPTION],
   },
   entry: {
@@ -147,21 +149,6 @@ export function parseBlockText(text) {
     errors: [],
     warnings: parsed.warnings,
   };
-}
-
-/**
- * ---BLOCKLIST--- 텍스트 → 만들 블록 이름들.
- * @returns {{ ok: boolean, value: object|null, errors: string[], warnings: string[] }}
- */
-export function parseBlockListText(text) {
-  const parsed = parseStructured(text, 'blocklist');
-  if (!parsed.ok) return parsed;
-
-  const value = toValue('blocklist', parsed.fields);
-  if (value.blockNames.length === 0) {
-    return { ok: false, value: null, errors: ['블록 목록이 비어 있습니다.'], warnings: [] };
-  }
-  return { ok: true, value, errors: [], warnings: parsed.warnings };
 }
 
 /**
@@ -383,13 +370,13 @@ export function parseDocuments(text) {
 
 /** 읽어낸 필드 맵을 화면이 쓰는 모양으로 */
 function toValue(kind, f) {
-  if (kind === 'blocklist') {
-    return { subjectName: f[K.SUBJECT], blockNames: splitBlockNames(f[K.BLOCKLIST]) };
-  }
   if (kind === 'subject') {
     return {
       subjectName: f[K.SUBJECT],
       description: f[K.DESCRIPTION],
+      // 목록 줄이 아예 없으면 null — '빈 목록'과 구분해야 한다.
+      // null 이면 블록을 건드리지 않고, 빈 배열이면 "적었는데 하나도 못 읽었다"는 뜻이다.
+      blockNames: Object.hasOwn(f, K.BLOCKLIST) ? splitBlockNames(f[K.BLOCKLIST]) : null,
       diagramCode: f[K.DIAGRAM] ?? '',
       svgCode: f[K.SVG] ?? '',
     };
@@ -617,18 +604,25 @@ function emitDoc(marker, rows, { emptyNote = false } = {}) {
   return lines.join('\n');
 }
 
-/** 과목 자체 정보 → ---SUBJECT--- */
-export function buildSubjectInfoText(subject) {
-  return `${emitDoc(
-    SUBJECT_MARKER,
-    [
-      [K.SUBJECT, subject?.name],
-      [K.DESCRIPTION, subject?.description, 'block'],
-      [K.DIAGRAM, subject?.diagramCode, 'fence'],
-      [K.SVG, subject?.svgCode, 'block'],
-    ],
-    { emptyNote: true }
-  )}\n`;
+/**
+ * 과목 자체 정보 → ---SUBJECT---
+ *
+ * 블록 목록은 **저장된 값이 아니라 지금 그 과목에 속한 블록들**이다.
+ * 호출부가 selector 로 조회한 배열을 그대로 넘긴다 — 과목에 목록 사본을
+ * 따로 보관하면 블록을 만들거나 지운 순간 둘이 어긋난다.
+ */
+export function buildSubjectInfoText(subject, blocks = []) {
+  return `${emitDoc(SUBJECT_MARKER, subjectRows(subject, blocks), { emptyNote: true })}\n`;
+}
+
+function subjectRows(subject, blocks) {
+  return [
+    [K.SUBJECT, subject?.name],
+    [K.DESCRIPTION, subject?.description, 'block'],
+    [K.BLOCKLIST, blocks.map((b) => b.name).join('\n'), 'block'],
+    [K.DIAGRAM, subject?.diagramCode, 'fence'],
+    [K.SVG, subject?.svgCode, 'block'],
+  ];
 }
 
 /** 블록 자체 정보 → ---BLOCK--- */
@@ -661,14 +655,7 @@ export function buildEntriesText(subject, block, entries) {
  * @param {Function} entriesOf blockId → 그 블록의 기록 배열 (selector 를 그대로 넘긴다)
  */
 export function buildSubjectBundleText(subject, blocks, entriesOf) {
-  const parts = [
-    emitDoc(SUBJECT_MARKER, [
-      [K.SUBJECT, subject?.name],
-      [K.DESCRIPTION, subject?.description, 'block'],
-      [K.DIAGRAM, subject?.diagramCode, 'fence'],
-      [K.SVG, subject?.svgCode, 'block'],
-    ]),
-  ];
+  const parts = [emitDoc(SUBJECT_MARKER, subjectRows(subject, blocks))];
 
   for (const block of blocks) {
     parts.push(emitDoc(BLOCK_MARKER, blockRows(subject, block)));
