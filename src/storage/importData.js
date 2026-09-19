@@ -9,7 +9,7 @@
  * 실패하든 기존 기록은 그대로 남는다.
  */
 
-import { ensureShape, pruneOrphans, nowIso } from './schema.js';
+import { ensureShape, pruneOrphans, nowIso, migrate, SCHEMA_VERSION } from './schema.js';
 import { validateBackup, countEntities } from './validate.js';
 import { mergeStates } from './merge.js';
 import { snapshotCurrent } from './persist.js';
@@ -96,11 +96,18 @@ export function applyImport(currentState, backup, mode) {
     return { ok: false, state: null, report: null, snapshotKey: null, error: '가져올 데이터가 없습니다.' };
   }
 
+  // 낮은 버전의 백업은 먼저 현재 스키마로 끌어올린다.
+  const lifted = liftToCurrentSchema(backup);
+  if (!lifted.ok) {
+    return { ok: false, state: null, report: null, snapshotKey: null, error: lifted.error };
+  }
+  const data = lifted.data;
+
   let nextState;
   let report;
 
   if (mode === IMPORT_MODE.OVERWRITE) {
-    const pruned = pruneOrphans(ensureShape(backup.data));
+    const pruned = pruneOrphans(ensureShape(data));
     const incomingCounts = countEntities(pruned.state);
     nextState = {
       ...pruned.state,
@@ -120,7 +127,7 @@ export function applyImport(currentState, backup, mode) {
       recolored: [],
     };
   } else if (mode === IMPORT_MODE.MERGE) {
-    const merged = mergeStates(currentState, backup.data);
+    const merged = mergeStates(currentState, data);
     nextState = merged.state;
     report = { mode: IMPORT_MODE.MERGE, ...merged.report };
   } else {
@@ -138,6 +145,36 @@ export function applyImport(currentState, backup, mode) {
   const snapshotKey = snapshotCurrent(`pre-import-${mode}`);
 
   return { ok: true, state: nextState, report, snapshotKey, error: null };
+}
+
+/**
+ * 예전 버전에서 만든 백업을 현재 스키마로 끌어올린다.
+ *
+ * 없으면 안 되는 단계다. localStorage 를 읽을 때만 마이그레이션하고 백업 가져오기에서는
+ * 건너뛰면, v2 백업을 가져온 순간 블록에 설명·진행률 같은 새 필드가 없는 채로 v3 딱지만
+ * 붙어 저장된다. 그 뒤로는 어떤 마이그레이션도 그 데이터를 다시 손보지 않는다.
+ *
+ * 공용 PC를 오가며 예전 백업 파일을 들고 다니는 사용 방식이라 실제로 자주 일어날 일이다.
+ * (더 높은 버전의 백업은 validateBackup 이 이미 막았다)
+ *
+ * @returns {{ ok: boolean, data: object|null, error: string|null }}
+ */
+function liftToCurrentSchema(backup) {
+  const version = Number(backup.version);
+  if (!Number.isFinite(version) || version >= SCHEMA_VERSION) {
+    return { ok: true, data: backup.data, error: null };
+  }
+
+  try {
+    const { state } = migrate({ ...backup.data, version });
+    return { ok: true, data: state, error: null };
+  } catch (err) {
+    return {
+      ok: false,
+      data: null,
+      error: `백업(v${version})을 현재 버전(v${SCHEMA_VERSION})으로 변환하지 못했습니다: ${err.message}`,
+    };
+  }
 }
 
 /** 결과 보고를 사람이 읽을 문장으로 */

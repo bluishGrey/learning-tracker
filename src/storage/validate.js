@@ -177,11 +177,15 @@ export function validateStateShape(data) {
         message: '사용자 지정 색 형식이 올바르지 않아 자동 배정 색을 사용합니다.',
       });
     }
-    if (!Number.isFinite(Number(s.totalBlocks)) || Number(s.totalBlocks) < 0) {
-      errors.push({
-        path: at('totalBlocks'),
-        message: '전체 진도 단위 수가 0 이상의 숫자가 아닙니다.',
-      });
+    // ─ v4 에서 추가된 Subject 자체 정보. 전부 선택 필드다. ─
+    if (s.description != null && typeof s.description !== 'string') {
+      errors.push({ path: at('description'), message: '과목 설명이 문자열이 아닙니다.' });
+    }
+    if (s.diagramCode != null && typeof s.diagramCode !== 'string') {
+      errors.push({ path: at('diagramCode'), message: '다이어그램 코드가 문자열이 아닙니다.' });
+    }
+    if (s.svgCode != null && typeof s.svgCode !== 'string') {
+      errors.push({ path: at('svgCode'), message: 'SVG 코드가 문자열이 아닙니다.' });
     }
   });
 
@@ -210,6 +214,17 @@ export function validateStateShape(data) {
     if (typeof b.isCompleted !== 'boolean') {
       errors.push({ path: at('isCompleted'), message: '완료 여부가 true/false 가 아닙니다.' });
     }
+    // ─ v3 에서 추가된 Block 자체 정보. 전부 선택 필드다. ─
+    if (b.description != null && typeof b.description !== 'string') {
+      errors.push({ path: at('description'), message: '블록 설명이 문자열이 아닙니다.' });
+    }
+    if (b.diagramCode != null && typeof b.diagramCode !== 'string') {
+      errors.push({ path: at('diagramCode'), message: '다이어그램 코드가 문자열이 아닙니다.' });
+    }
+    if (b.svgCode != null && typeof b.svgCode !== 'string') {
+      errors.push({ path: at('svgCode'), message: 'SVG 코드가 문자열이 아닙니다.' });
+    }
+    warnings.push(...checkPercent(b.progressPercent, at('progressPercent'), '블록 진행률'));
   });
 
   // ─ Entry ─
@@ -249,6 +264,10 @@ export function validateStateShape(data) {
     if (e.title != null && typeof e.title !== 'string') {
       errors.push({ path: at('title'), message: '제목이 문자열이 아닙니다.' });
     }
+    if (e.diagramCode != null && typeof e.diagramCode !== 'string') {
+      errors.push({ path: at('diagramCode'), message: '다이어그램 코드가 문자열이 아닙니다.' });
+    }
+    warnings.push(...checkPercent(e.progressPercent, at('progressPercent'), '기록 진행률'));
   });
 
   return {
@@ -256,6 +275,25 @@ export function validateStateShape(data) {
     errors: errors.slice(0, MAX_REPORTED_ERRORS),
     warnings,
   };
+}
+
+/**
+ * 진행률(0~100 또는 null) 검사.
+ *
+ * 오류가 아니라 경고로 둔다. 진행률은 claude.ai 가 계산해 보내준 참고값이라
+ * 값 하나가 이상하다고 백업 전체의 가져오기를 막을 만한 데이터가 아니다.
+ * 화면에 그릴 때 0~100 으로 물려서 표시한다.
+ */
+function checkPercent(value, path, label) {
+  if (value == null) return [];
+  const n = Number(value);
+  if (!Number.isFinite(n)) {
+    return [{ path, message: `${label}이 숫자가 아니어서 무시합니다. (받은 값: ${JSON.stringify(value)})` }];
+  }
+  if (n < 0 || n > 100) {
+    return [{ path, message: `${label}이 0~100 범위를 벗어났습니다. (${n}) 표시할 때 범위 안으로 맞춥니다.` }];
+  }
+  return [];
 }
 
 export function countEntities(data) {

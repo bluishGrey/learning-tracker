@@ -8,6 +8,32 @@
     />
     <meta name="color-scheme" content="light dark" />
     <title>학습 트래커</title>
+    <script>
+      /*
+       * 첫 페인트 전에 테마를 정한다.
+       *
+       * 번들이 로드된 뒤에 정하면 기본값(다크)으로 한 번 그려진 뒤 바뀌어서,
+       * 주간을 쓰는 사람에게는 열 때마다 검은 화면이 번쩍인다.
+       * 그래서 이 한 조각만 동기 스크립트로 앞세운다.
+       *
+       * 키와 규칙은 src/lib/theme.js 와 같아야 한다. 한쪽만 고치지 말 것.
+       */
+      (function () {
+        var theme = 'dark';
+        try {
+          var saved = localStorage.getItem('learning-tracker:theme');
+          theme =
+            saved === 'light' || saved === 'dark'
+              ? saved
+              : window.matchMedia('(prefers-color-scheme: light)').matches
+                ? 'light'
+                : 'dark';
+        } catch (e) {
+          /* 저장소가 막혀 있으면 기본값으로 둔다 */
+        }
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

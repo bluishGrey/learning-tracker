@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 
 import AppHeader from './components/AppHeader.jsx';
 import NoticeBar from './components/NoticeBar.jsx';
 import Sidebar from './components/Sidebar.jsx';
+import ShortcutHelp from './components/ShortcutHelp.jsx';
 
 import Home from './routes/Home.jsx';
 import CalendarView from './routes/CalendarView.jsx';
@@ -16,6 +17,7 @@ import EntryEditor from './routes/EntryEditor.jsx';
 import NotFound from './routes/NotFound.jsx';
 
 import { todayKey, monthKeyOf } from './lib/date.js';
+import { isTypingTarget, isBareKey, hasMod } from './lib/hotkeys.js';
 
 // 순서가 중요하다 — 컴포넌트 규칙이 기본 규칙을 덮어쓸 수 있어야 한다.
 import './styles/global.css';
@@ -43,11 +45,14 @@ export default function App() {
  * Breadcrumb 을 별도 상태로 들고 있지 않아도 새로고침·뒤로가기에서 경로가 복원된다.
  */
 function Shell() {
+  const navigate = useNavigate();
   const [isNarrow, setIsNarrow] = useState(
     () => window.matchMedia?.(NARROW_QUERY).matches ?? false
   );
   // 넓은 화면에서는 기본으로 펼쳐 두고, 좁은 화면에서는 접어 둔다.
   const [sidebarOpen, setSidebarOpen] = useState(() => !isNarrow);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const searchRef = useRef(null);
 
   useEffect(() => {
     const mq = window.matchMedia(NARROW_QUERY);
@@ -59,17 +64,63 @@ function Shell() {
     return () => mq.removeEventListener('change', handle);
   }, []);
 
-  // Ctrl+B / Cmd+B 로 열고 닫는다.
+  /**
+   * 검색창으로 포커스를 옮긴다.
+   *
+   * 좁은 화면에서는 사이드바가 닫혀 있고 inert 라 포커스가 들어가지 않는다.
+   * 먼저 열고, 화면이 다시 그려진 다음 프레임에 잡는다.
+   */
+  const focusSearch = useCallback(() => {
+    setSidebarOpen(true);
+    requestAnimationFrame(() => {
+      const input = searchRef.current;
+      if (!input) return;
+      input.focus();
+      input.select();
+    });
+  }, []);
+
+  /*
+   * 전역 단축키.
+   *
+   * 단독 키(/ 와 ?)는 **입력 중이면 무시한다.** 이 가드가 없으면 기록을 쓰다가
+   * '/' 를 칠 때마다 검색창으로 튄다. 조합키는 글자를 만들지 않으므로 가드 없이
+   * 받는다.
+   *
+   * 글자 키는 event.code 로 본다 — Mac 의 Option+N 은 데드키라 event.key 가
+   * 'n' 이 아니다.
+   */
   useEffect(() => {
     const onKeyDown = (event) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'b') {
+      if (event.defaultPrevented || event.repeat) return;
+
+      // ─ 조합키: 어디서든 ─
+      if (hasMod(event) && event.altKey && event.code === 'KeyN') {
+        event.preventDefault();
+        navigate('/new');
+        return;
+      }
+      if (hasMod(event) && !event.altKey && event.code === 'KeyB') {
         event.preventDefault();
         setSidebarOpen((v) => !v);
+        return;
+      }
+
+      // ─ 단독 키: 글을 쓰는 중이 아닐 때만 ─
+      if (!isBareKey(event) || isTypingTarget(event.target)) return;
+
+      if (event.key === '/') {
+        event.preventDefault();
+        focusSearch();
+      } else if (event.key === '?') {
+        event.preventDefault();
+        setHelpOpen(true);
       }
     };
+
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [navigate, focusSearch]);
 
   // 좁은 화면에서는 이동하면 덮개를 걷어준다.
   const handleNavigate = useCallback(() => {
@@ -82,7 +133,12 @@ function Shell() {
       <NoticeBar />
 
       <div className="shell">
-        <Sidebar open={sidebarOpen} onNavigate={handleNavigate} />
+        <Sidebar
+          open={sidebarOpen}
+          onNavigate={handleNavigate}
+          searchRef={searchRef}
+          onOpenHelp={() => setHelpOpen(true)}
+        />
 
         {isNarrow && sidebarOpen && (
           <button
@@ -121,6 +177,8 @@ function Shell() {
           </Routes>
         </div>
       </div>
+
+      <ShortcutHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   );
 }

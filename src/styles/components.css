@@ -1038,6 +1038,9 @@
 .sidebar {
   width: var(--sidebar-w);
   flex: none;
+  /* 세로 flex — 바닥 고정 푸터(테마 전환)가 margin-top:auto 로 밀려 내려간다 */
+  display: flex;
+  flex-direction: column;
   background: var(--surface);
   border-right: 1px solid var(--border);
   padding: var(--sp-3) var(--sp-2) var(--sp-5);
@@ -1483,4 +1486,544 @@
   min-height: 32px;
   padding: 0 var(--sp-2);
   font-size: 0.8rem;
+}
+
+/* ═══ 다이어그램 · SVG 뷰어 보강 ═══════════════════════════ */
+
+/*
+ * mermaid 가 그린 그림은 가운데로 모은다. 왼쪽에 붙여 두면 폭이 좁은 도형에서
+ * 카드 오른쪽이 텅 빈 채로 남는다.
+ */
+.diagram-embed {
+  display: flex;
+  justify-content: center;
+}
+
+.diagram-embed svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.svg-embed--invalid {
+  border-style: dashed;
+}
+
+.svg-embed__detail {
+  margin-top: var(--sp-2);
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.svg-embed__detail summary {
+  cursor: pointer;
+  color: var(--text-faint);
+}
+
+.svg-embed__detail pre {
+  margin: var(--sp-2) 0 0;
+  padding: var(--sp-2);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 그려지긴 하지만 짚어줄 문제 — 오류(빨강)와 구별되게 노랑 쪽으로 */
+.svg-embed__warnings {
+  margin: var(--sp-2) 0 0;
+  padding-left: 1.1em;
+  color: var(--warn);
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+
+/* ═══ 진행률 추이 ═══════════════════════════════════════════ */
+
+.trend {
+  margin: 0;
+}
+
+.trend__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--sp-2);
+}
+
+/* 눈금은 데이터보다 뒤로 물러나 있어야 한다 — 실선 1px, 한 단계 낮은 회색 */
+.trend__grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.trend__tick {
+  fill: var(--text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 표면색 링이 있어야 점이 선·다른 점과 겹쳐도 구분된다 */
+.trend__dot {
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+/* 값 글자는 계열 색이 아니라 본문 글자색을 쓴다 (옅은 색은 글자로 읽히지 않는다) */
+.trend__value {
+  fill: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.trend__caption {
+  margin-top: var(--sp-2);
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+
+/* ═══ 붙여넣기 가져오기 ═══════════════════════════════════ */
+
+.paste__input {
+  min-height: 200px;
+  font-size: 0.82rem;
+}
+
+.paste__result {
+  margin-top: var(--sp-3);
+}
+
+.paste__errors {
+  margin: var(--sp-2) 0 0;
+  padding-left: 1.1em;
+  line-height: 1.7;
+}
+
+.paste__preview {
+  margin: var(--sp-2) 0 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.paste__previewrow {
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: 0.82rem;
+  border-top: 1px solid var(--border);
+}
+
+.paste__previewrow:first-child {
+  border-top: none;
+}
+
+.paste__previewrow dt {
+  flex: 0 0 5.5em;
+  color: var(--text-faint);
+}
+
+.paste__previewrow dd {
+  margin: 0;
+  color: var(--text-dim);
+  word-break: break-word;
+}
+
+/* ═══ 사이드바 검색 ═══════════════════════════════════════ */
+
+.sidebar__search {
+  position: relative;
+  padding: var(--sp-2) 0 var(--sp-3);
+}
+
+.input--sm {
+  min-height: 36px;
+  font-size: 0.85rem;
+}
+
+/* 검색어가 있을 때만 나타나는 지우기 버튼 */
+.sidebar__searchclear {
+  position: absolute;
+  right: var(--sp-2);
+  top: calc(var(--sp-2) + 6px);
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface-3);
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.searchresults__count {
+  margin: 0 var(--sp-2) var(--sp-2);
+  font-size: 0.75rem;
+  color: var(--text-faint);
+}
+
+.searchresults__group {
+  margin-bottom: var(--sp-3);
+}
+
+.searchresults__grouptitle {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-1);
+  padding: 0 var(--sp-2);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.searchresults__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.searchresults__row {
+  display: block;
+  padding: var(--sp-2);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.searchresults__row:hover {
+  background: var(--surface-2);
+}
+
+.searchresults__title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
+.searchresults__path,
+.searchresults__snippet {
+  display: block;
+  font-size: 0.74rem;
+  color: var(--text-faint);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.searchresults__snippet {
+  color: var(--text-dim);
+}
+
+.searchresults__more {
+  margin: 0 var(--sp-2);
+  font-size: 0.74rem;
+  color: var(--text-faint);
+  line-height: 1.6;
+}
+
+/* ═══ 블록 상세 보강 ═══════════════════════════════════════ */
+
+.blockhead__progress {
+  margin-bottom: var(--sp-3);
+}
+
+.blockdesc {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface);
+}
+
+/*
+ * 아직 채우지 않은 자리 안내. 기록이 없을 때의 .empty 만큼 자리를 차지하면
+ * 매번 눈에 걸리므로, 테두리 없이 한 줄로만 남긴다.
+ */
+.empty--quiet {
+  border: none;
+  padding: var(--sp-3) 0;
+  text-align: left;
+  font-size: 0.82rem;
+  color: var(--text-faint);
+  line-height: 1.7;
+}
+
+.section__note {
+  font-size: 0.75rem;
+  color: var(--text-faint);
+}
+
+.editor__import {
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-4);
+}
+
+.editor__importhint {
+  flex: 1 1 14em;
+  line-height: 1.6;
+}
+
+/* 진행률 배지는 다른 배지와 달리 값이므로 살짝 강조한다 */
+.entryrow__badge--progress {
+  background: var(--accent-soft);
+  color: var(--accent-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.entryview__progress {
+  margin-top: var(--sp-2);
+}
+
+/* ═══ 주고받기 버튼 묶음 ═══════════════════════════════════ */
+
+/*
+ * '자기 자신'과 '하위 전체'를 묶음으로 가른다. 버튼 넷이 한 줄로 늘어서 있으면
+ * "과목 정보 내보내기"와 "과목 전체 내보내기"의 차이를 매번 라벨로 읽어야 한다.
+ */
+.exchange {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin: var(--sp-4) 0;
+}
+
+.exchange__group {
+  flex: 1 1 260px;
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.exchange__label {
+  margin: 0 0 var(--sp-2);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.exchange__hint {
+  display: block;
+  margin-top: 2px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 0.74rem;
+  color: var(--text-faint);
+}
+
+.exchange__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.paste__note {
+  margin-top: var(--sp-2);
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+/* ═══ 테마 전환 ═══════════════════════════════════════════ */
+
+/*
+ * 사이드바 바닥에 붙는다. sticky 라서 트리가 길어져 스크롤이 생겨도
+ * 화면 안에 남는다. 아래쪽 음수 여백은 사이드바의 패딩을 덮어, 스크롤할 때
+ * 이 줄 밑으로 트리가 비쳐 보이지 않게 한다.
+ */
+.sidebar__footer {
+  /* 내용이 짧으면 바닥으로 밀리고(auto), 길어 스크롤이 생기면 붙어 있는다(sticky) */
+  margin-top: auto;
+  position: sticky;
+  bottom: calc(var(--sp-5) * -1);
+  margin-right: calc(var(--sp-2) * -1);
+  margin-bottom: calc(var(--sp-5) * -1);
+  margin-left: calc(var(--sp-2) * -1);
+  padding: var(--sp-3) var(--sp-2);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.themetoggle {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+.themetoggle__btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 30px;
+  padding: 0 var(--sp-1);
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 0.74rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.themetoggle__btn:hover {
+  color: var(--text-dim);
+}
+
+/* 지금 켜진 칸 — 눌린 상태가 색만이 아니라 면으로도 보여야 한다 */
+.themetoggle__btn--on {
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ═══ 단축키 ═══════════════════════════════════════════════ */
+
+.sidebar__help {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  width: 100%;
+  margin-top: var(--sp-2);
+  padding: var(--sp-1) 0;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+
+.sidebar__help:hover {
+  color: var(--text-dim);
+}
+
+.kbd {
+  display: inline-block;
+  min-width: 1.5em;
+  padding: 1px 5px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 0.72em;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.shortcuts {
+  margin: 0;
+}
+
+.shortcuts__row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-top: 1px solid var(--border);
+}
+
+.shortcuts__row:first-child {
+  border-top: none;
+}
+
+.shortcuts__keys {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 8.5em;
+}
+
+.shortcuts__label {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+/* 왜 그 조합인지 같은 부연은 한 단 낮춰 둔다 */
+.shortcuts__note {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.74rem;
+  color: var(--text-faint);
+  line-height: 1.5;
+}
+
+.shortcuts__foot {
+  margin-top: var(--sp-4);
+  line-height: 1.6;
+}
+
+/* ═══ 그림 확대 ═══════════════════════════════════════════ */
+
+.figure__expand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-dim);
+  cursor: pointer;
+  flex: none;
+}
+
+.figure__expand:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+/*
+ * 확대 창은 화면을 거의 다 쓴다. 그림을 크게 보려고 연 창이 작으면
+ * 연 의미가 없다.
+ */
+.sheet__panel--wide {
+  max-width: min(1100px, 96vw);
+  max-height: 94dvh;
+}
+
+.sheet__panel--wide .svg-embed {
+  min-height: 40dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/*
+ * 확대 창 안에서는 그림이 들어갈 수 있는 만큼 커진다.
+ *
+ * max-width 를 !important 로 덮는 이유: mermaid 는 useMaxWidth 옵션에 따라
+ * 그린 SVG 에 `style="max-width: 168px"` 처럼 **인라인으로** 자연 크기를 박아
+ * 둔다. 그대로 두면 창만 커지고 그림은 그대로라 확대가 아무 일도 하지 않는다.
+ *
+ * width 100% + height auto 로 폭에 맞춰 늘리고, 세로로 넘치면 max-height 가
+ * 잡아 준다 (viewBox 가 있으니 비율은 알아서 유지된다).
+ */
+.sheet__panel--wide .diagram-embed svg,
+.sheet__panel--wide .svg-embed svg {
+  width: 100%;
+  height: auto;
+  max-width: none !important;
+  max-height: 76dvh;
 }

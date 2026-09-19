@@ -46,11 +46,6 @@ export default function SubjectCard({ row }) {
         </span>
       </div>
 
-      {progress.overflow && (
-        <p className="subjectcard__warn">
-          만든 블록({progress.created})이 설정한 전체 진도 단위({progress.total})보다 많습니다.
-        </p>
-      )}
     </Link>
   );
 }

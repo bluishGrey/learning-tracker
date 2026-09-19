@@ -15,8 +15,33 @@ import { normalizeHex } from '../lib/color.js';
 /**
  * v1 → v2: Subject 에 사용자 지정 색(customColor)이 추가되었다.
  * 자동 배정된 colorHue 는 그대로 두고, customColor 가 있으면 렌더링에서만 우선한다.
+ *
+ * v2 → v3: Block 이 '그릇'에서 '자체 정보를 가진 계층'으로 올라갔다.
+ * Block 에 description/progressPercent/diagramCode/svgCode 가, Entry 에는
+ * diagramCode/progressPercent 가 붙는다.
+ *
+ * progressPercent 가 두 곳에 있는 것은 의도된 것이다. 둘은 다른 값이다.
+ *   - Block.progressPercent  = 그 블록의 대표 진행률. 트래커가 계산하지 않고
+ *     claude.ai 가 계산해 보내준 값을 그대로 보관만 한다.
+ *   - Entry.progressPercent  = 그 기록 시점의 진행률. 시간축으로 늘어놓아
+ *     블록 상세의 진행률 추이 그래프를 그리는 데 쓴다.
+ * 앞의 것은 '지금 어디쯤인가', 뒤의 것은 '어떻게 여기까지 왔나'를 답한다.
+ *
+ * v3 → v4: Subject 도 Block 과 같은 자체 정보(description/diagramCode/svgCode)를
+ * 갖는다. 계층 전체에서 '자기 자신 정보'와 '하위 전체'를 같은 방식으로 주고받기
+ * 위해서다.
+ *
+ * Subject 에는 progressPercent 를 두지 않는다. 과목 진도율은 계산되는 값이고,
+ * 그 옆에 보관만 하는 숫자를 하나 더 두면 화면에 두 개의 진도율이 서로 다른
+ * 값을 가리키게 된다.
+ *
+ * v4 → v5: Subject.totalBlocks 를 **없앴다.**
+ *
+ * 진도율의 분모였는데, 사용자가 따로 입력해 두는 값이라 실제 블록 개수와
+ * 언제든 어긋날 수 있었다. 분모는 그 과목에 실제로 속한 블록을 세면 나오는
+ * 값이므로, 보관하지 않고 매번 센다. 기존에 저장된 값은 버린다.
  */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 5;
 
 /** localStorage 메인 키 */
 export const STORAGE_KEY = 'learning-tracker:v1';
@@ -54,20 +79,37 @@ export function createInitialState() {
 
 // ─── 엔티티 팩토리 ─────────────────────────────────────────
 
-export function makeSubject({ name, totalBlocks = 0, colorHue = 0, customColor = null }) {
+export function makeSubject({
+  name,
+  colorHue = 0,
+  customColor = null,
+  description = '',
+  diagramCode = null,
+  svgCode = null,
+}) {
   const now = nowIso();
   return {
     id: newId(),
     name: String(name ?? '').trim(),
     colorHue,
     customColor: normalizeCustomColor(customColor),
-    totalBlocks: toNonNegativeInt(totalBlocks),
+    description: String(description ?? ''),
+    diagramCode: normalizeDiagram(diagramCode),
+    svgCode: normalizeSvg(svgCode),
     createdAt: now,
     updatedAt: now,
   };
 }
 
-export function makeBlock({ subjectId, name, order = 0 }) {
+export function makeBlock({
+  subjectId,
+  name,
+  order = 0,
+  description = '',
+  progressPercent = null,
+  diagramCode = null,
+  svgCode = null,
+}) {
   const now = nowIso();
   return {
     id: newId(),
@@ -75,6 +117,10 @@ export function makeBlock({ subjectId, name, order = 0 }) {
     name: String(name ?? '').trim(),
     isCompleted: false,
     order,
+    description: String(description ?? ''),
+    progressPercent: normalizePercent(progressPercent),
+    diagramCode: normalizeDiagram(diagramCode),
+    svgCode: normalizeSvg(svgCode),
     createdAt: now,
     updatedAt: now,
   };
@@ -85,8 +131,10 @@ export function makeEntry({
   date = todayKey(),
   tags = [],
   content = '',
+  diagramCode = null,
   svgCode = null,
   title = null,
+  progressPercent = null,
 }) {
   const now = nowIso();
   return {
@@ -96,7 +144,9 @@ export function makeEntry({
     title: normalizeTitle(title),
     tags: normalizeTags(tags),
     content: String(content ?? ''),
+    diagramCode: normalizeDiagram(diagramCode),
     svgCode: normalizeSvg(svgCode),
+    progressPercent: normalizePercent(progressPercent),
     createdAt: now,
     updatedAt: now,
   };
@@ -138,14 +188,37 @@ export function normalizeCustomColor(value) {
 }
 
 export function normalizeSvg(svgCode) {
-  if (typeof svgCode !== 'string') return null;
-  const trimmed = svgCode.trim();
-  return trimmed.length > 0 ? trimmed : null;
+  return trimToNull(svgCode);
 }
 
-export function toNonNegativeInt(value) {
-  const n = Math.trunc(Number(value));
-  return Number.isFinite(n) && n > 0 ? n : 0;
+/**
+ * 다이어그램은 Mermaid 문법 텍스트 원문을 그대로 보관한다.
+ * SVG 와 같은 규칙이지만 별도 함수로 두는 쪽이 호출부에서 읽기 쉽고,
+ * 나중에 한쪽 규칙만 바뀌어도 서로를 건드리지 않는다.
+ */
+export function normalizeDiagram(diagramCode) {
+  return trimToNull(diagramCode);
+}
+
+/**
+ * 진행률은 0~100 정수 또는 null 이다.
+ *
+ * '미설정'과 '0%'는 다른 뜻이라 반드시 null 로 구분한다.
+ * (toNonNegativeInt 는 잘못된 값을 0 으로 떨어뜨리므로 여기 쓸 수 없다)
+ * 범위를 넘는 값은 버리지 않고 양 끝으로 물린다 — claude.ai 가 105 를 보내와도
+ * 기록 자체를 잃는 것보다 100 으로 저장되는 편이 낫다.
+ */
+export function normalizePercent(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.min(100, Math.max(0, Math.round(n)));
+}
+
+function trimToNull(value) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 // ─── 마이그레이션 ──────────────────────────────────────────
@@ -162,6 +235,70 @@ const MIGRATIONS = {
       Object.entries(state.subjects ?? {}).map(([id, subject]) => [
         id,
         { ...subject, customColor: normalizeCustomColor(subject.customColor) },
+      ])
+    ),
+  }),
+
+  /**
+   * v2 → v3: Block 이 자체 정보(설명·진행률·다이어그램·SVG)를 갖고,
+   * Entry 에 다이어그램과 진행률이 붙는다.
+   *
+   * 기존 데이터에는 전부 없는 필드이므로 '미설정'을 뜻하는 값으로 채운다.
+   * 진행률을 0 이 아니라 null 로 채우는 게 중요하다 — 0 으로 채우면 예전 기록이
+   * 전부 "진행률 0%"로 그래프에 찍혀 추이가 거짓이 된다.
+   */
+  /**
+   * v4 → v5: Subject.totalBlocks 제거.
+   * 진도율의 분모는 이제 실제 블록 개수를 세어 구한다 (selectProgress).
+   */
+  4: (state) => ({
+    ...state,
+    subjects: Object.fromEntries(
+      Object.entries(state.subjects ?? {}).map(([id, subject]) => {
+        const { totalBlocks: _dropped, ...rest } = subject;
+        return [id, rest];
+      })
+    ),
+  }),
+
+  /** v3 → v4: Subject 에 자체 정보(설명·다이어그램·SVG) 추가 */
+  3: (state) => ({
+    ...state,
+    subjects: Object.fromEntries(
+      Object.entries(state.subjects ?? {}).map(([id, subject]) => [
+        id,
+        {
+          ...subject,
+          description: String(subject.description ?? ''),
+          diagramCode: normalizeDiagram(subject.diagramCode),
+          svgCode: normalizeSvg(subject.svgCode),
+        },
+      ])
+    ),
+  }),
+
+  2: (state) => ({
+    ...state,
+    blocks: Object.fromEntries(
+      Object.entries(state.blocks ?? {}).map(([id, block]) => [
+        id,
+        {
+          ...block,
+          description: String(block.description ?? ''),
+          progressPercent: normalizePercent(block.progressPercent),
+          diagramCode: normalizeDiagram(block.diagramCode),
+          svgCode: normalizeSvg(block.svgCode),
+        },
+      ])
+    ),
+    entries: Object.fromEntries(
+      Object.entries(state.entries ?? {}).map(([id, entry]) => [
+        id,
+        {
+          ...entry,
+          diagramCode: normalizeDiagram(entry.diagramCode),
+          progressPercent: normalizePercent(entry.progressPercent),
+        },
       ])
     ),
   }),

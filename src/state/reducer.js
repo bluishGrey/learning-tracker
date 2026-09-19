@@ -13,8 +13,9 @@ import {
   normalizeTags,
   normalizeTitle,
   normalizeSvg,
+  normalizeDiagram,
+  normalizePercent,
   normalizeCustomColor,
-  toNonNegativeInt,
   createInitialState,
 } from '../storage/schema.js';
 import { nextFreeHueIndex } from '../lib/color.js';
@@ -30,11 +31,14 @@ export const ACTIONS = {
   BLOCK_TOGGLE: 'block/toggle',
   BLOCK_REMOVE: 'block/remove',
   BLOCK_REORDER: 'block/reorder',
+  BLOCK_MOVE: 'block/move',
 
   ENTRY_ADD: 'entry/add',
   ENTRY_UPDATE: 'entry/update',
   ENTRY_REMOVE: 'entry/remove',
   ENTRY_MOVE: 'entry/move',
+
+  BUNDLE_APPLY: 'bundle/apply',
 
   SETTINGS_UPDATE: 'settings/update',
   EXPORT_MARK: 'export/mark',
@@ -46,7 +50,7 @@ export function reducer(state, action) {
   switch (action.type) {
     // ─── Subject ───────────────────────────────────────────
     case ACTIONS.SUBJECT_ADD: {
-      const { id, name, totalBlocks, customColor } = action;
+      const { id, name, customColor, description, diagramCode, svgCode } = action;
 
       // 이미 쓰이는 색과 겹치지 않는 다음 순번을 고른다.
       // (백업 병합으로 순번이 건너뛰어졌을 수 있으므로 커서만 믿지 않는다)
@@ -68,7 +72,9 @@ export function reducer(state, action) {
             // 골든 앵글 순서와 색 충돌 판정이 계속 이 값으로만 이뤄지기 때문이다.
             colorHue: hue,
             customColor: normalizeCustomColor(customColor),
-            totalBlocks: toNonNegativeInt(totalBlocks),
+            description: String(description ?? ''),
+            diagramCode: normalizeDiagram(diagramCode),
+            svgCode: normalizeSvg(svgCode),
             createdAt: at,
             updatedAt: at,
           },
@@ -82,12 +88,18 @@ export function reducer(state, action) {
       if (!current) return state;
       const patch = {};
       if (action.patch.name !== undefined) patch.name = String(action.patch.name).trim();
-      if (action.patch.totalBlocks !== undefined) {
-        patch.totalBlocks = toNonNegativeInt(action.patch.totalBlocks);
-      }
       // null 을 넘기면 자동 배정 색으로 되돌아간다.
       if (action.patch.customColor !== undefined) {
         patch.customColor = normalizeCustomColor(action.patch.customColor);
+      }
+      if (action.patch.description !== undefined) {
+        patch.description = String(action.patch.description);
+      }
+      if (action.patch.diagramCode !== undefined) {
+        patch.diagramCode = normalizeDiagram(action.patch.diagramCode);
+      }
+      if (action.patch.svgCode !== undefined) {
+        patch.svgCode = normalizeSvg(action.patch.svgCode);
       }
       return touch({
         ...state,
@@ -125,11 +137,8 @@ export function reducer(state, action) {
 
     // ─── Block ─────────────────────────────────────────────
     case ACTIONS.BLOCK_ADD: {
-      const { id, subjectId, name } = action;
+      const { id, subjectId, name, description, progressPercent, diagramCode, svgCode } = action;
       if (!state.subjects[subjectId]) return state;
-
-      const siblings = Object.values(state.blocks).filter((b) => b.subjectId === subjectId);
-      const nextOrder = siblings.reduce((max, b) => Math.max(max, Number(b.order) || 0), -1) + 1;
 
       const at = nowIso();
       return touch({
@@ -141,7 +150,11 @@ export function reducer(state, action) {
             subjectId,
             name: String(name ?? '').trim(),
             isCompleted: false,
-            order: nextOrder,
+            order: nextBlockOrder(state, subjectId),
+            description: String(description ?? ''),
+            progressPercent: normalizePercent(progressPercent),
+            diagramCode: normalizeDiagram(diagramCode),
+            svgCode: normalizeSvg(svgCode),
             createdAt: at,
             updatedAt: at,
           },
@@ -152,11 +165,17 @@ export function reducer(state, action) {
     case ACTIONS.BLOCK_UPDATE: {
       const current = state.blocks[action.id];
       if (!current) return state;
+
+      const p = action.patch;
       const patch = {};
-      if (action.patch.name !== undefined) patch.name = String(action.patch.name).trim();
-      if (action.patch.isCompleted !== undefined) {
-        patch.isCompleted = Boolean(action.patch.isCompleted);
-      }
+      if (p.name !== undefined) patch.name = String(p.name).trim();
+      if (p.isCompleted !== undefined) patch.isCompleted = Boolean(p.isCompleted);
+      if (p.description !== undefined) patch.description = String(p.description);
+      // null 을 넘기면 '미설정'으로 되돌아간다 (0% 와는 다른 상태다)
+      if (p.progressPercent !== undefined) patch.progressPercent = normalizePercent(p.progressPercent);
+      if (p.diagramCode !== undefined) patch.diagramCode = normalizeDiagram(p.diagramCode);
+      if (p.svgCode !== undefined) patch.svgCode = normalizeSvg(p.svgCode);
+
       return touch({
         ...state,
         blocks: { ...state.blocks, [action.id]: { ...current, ...patch, updatedAt: nowIso() } },
@@ -189,6 +208,33 @@ export function reducer(state, action) {
       });
     }
 
+    /**
+     * 블록을 다른 과목으로 옮긴다.
+     *
+     * 소속 Entry 는 blockId 로만 블록에 매달려 있어 함께 따라온다 (건드릴 필요가 없다).
+     * order 는 옮겨간 과목의 맨 뒤로 새로 받는다 — 원래 과목에서의 순번을 그대로
+     * 들고 가면 이미 그 번호를 쓰는 블록과 겹쳐 목록 순서가 흔들린다.
+     */
+    case ACTIONS.BLOCK_MOVE: {
+      const current = state.blocks[action.id];
+      if (!current) return state;
+      if (!state.subjects[action.subjectId]) return state;
+      if (current.subjectId === action.subjectId) return state;
+
+      return touch({
+        ...state,
+        blocks: {
+          ...state.blocks,
+          [action.id]: {
+            ...current,
+            subjectId: action.subjectId,
+            order: nextBlockOrder(state, action.subjectId),
+            updatedAt: nowIso(),
+          },
+        },
+      });
+    }
+
     case ACTIONS.BLOCK_REORDER: {
       const at = nowIso();
       const blocks = { ...state.blocks };
@@ -203,7 +249,8 @@ export function reducer(state, action) {
 
     // ─── Entry ─────────────────────────────────────────────
     case ACTIONS.ENTRY_ADD: {
-      const { id, blockId, date, tags, content, svgCode, title } = action;
+      const { id, blockId, date, tags, content, diagramCode, svgCode, title, progressPercent } =
+        action;
       if (!state.blocks[blockId]) return state;
 
       const at = nowIso();
@@ -218,7 +265,9 @@ export function reducer(state, action) {
             title: normalizeTitle(title),
             tags: normalizeTags(tags),
             content: String(content ?? ''),
+            diagramCode: normalizeDiagram(diagramCode),
             svgCode: normalizeSvg(svgCode),
+            progressPercent: normalizePercent(progressPercent),
             createdAt: at,
             updatedAt: at,
           },
@@ -236,7 +285,9 @@ export function reducer(state, action) {
       if (p.title !== undefined) patch.title = normalizeTitle(p.title);
       if (p.tags !== undefined) patch.tags = normalizeTags(p.tags);
       if (p.content !== undefined) patch.content = String(p.content);
+      if (p.diagramCode !== undefined) patch.diagramCode = normalizeDiagram(p.diagramCode);
       if (p.svgCode !== undefined) patch.svgCode = normalizeSvg(p.svgCode);
+      if (p.progressPercent !== undefined) patch.progressPercent = normalizePercent(p.progressPercent);
       if (p.blockId !== undefined && state.blocks[p.blockId]) patch.blockId = p.blockId;
 
       return touch({
@@ -260,6 +311,86 @@ export function reducer(state, action) {
           [action.id]: { ...current, blockId: action.blockId, updatedAt: nowIso() },
         },
       });
+    }
+
+    /**
+     * 일괄 가져오기 반영 — 과목 정보·블록들·기록들을 한 번에.
+     *
+     * 액션 하나로 끝내는 이유:
+     *  - **원자성.** 중간에 멈추면 절반만 들어간 상태가 남는데, 그건 사용자가
+     *    되돌릴 수 없는 상태다. 계획이 통째로 적용되거나 아예 적용되지 않거나 둘 중 하나여야 한다.
+     *  - 리렌더와 저장(lastChangeAt)도 한 번만 일어난다.
+     *
+     * 계획(plan)은 lib/importPlan.js 가 만든다. id 는 호출부가 미리 만들어 싣는
+     * 이 파일의 규칙을 따르되, **order 만은 여기서 계산한다** — 파생값은 reducer 가
+     * state 를 보고 정하는 쪽이 낡은 값을 참조할 여지가 없다.
+     */
+    case ACTIONS.BUNDLE_APPLY: {
+      const { plan } = action;
+      const subject = state.subjects[plan.subjectId];
+      if (!subject) return state;
+
+      const at = nowIso();
+
+      const subjects = plan.subjectPatch
+        ? {
+            ...state.subjects,
+            [plan.subjectId]: {
+              ...subject,
+              description: String(plan.subjectPatch.description ?? ''),
+              diagramCode: normalizeDiagram(plan.subjectPatch.diagramCode),
+              svgCode: normalizeSvg(plan.subjectPatch.svgCode),
+              updatedAt: at,
+            },
+          }
+        : state.subjects;
+
+      const blocks = { ...state.blocks };
+      let nextOrder = nextBlockOrder(state, plan.subjectId);
+
+      for (const item of plan.blocks) {
+        const current = blocks[item.id];
+        const patch = {
+          description: String(item.patch.description ?? ''),
+          progressPercent: normalizePercent(item.patch.progressPercent),
+          diagramCode: normalizeDiagram(item.patch.diagramCode),
+          svgCode: normalizeSvg(item.patch.svgCode),
+        };
+
+        blocks[item.id] = current
+          ? { ...current, ...patch, updatedAt: at }
+          : {
+              id: item.id,
+              subjectId: plan.subjectId,
+              name: String(item.name ?? '').trim(),
+              isCompleted: false,
+              // 새로 만드는 블록이 여럿이면 순번이 겹치지 않게 하나씩 올린다
+              order: nextOrder++,
+              ...patch,
+              createdAt: at,
+              updatedAt: at,
+            };
+      }
+
+      const entries = { ...state.entries };
+      for (const item of plan.entries) {
+        const current = entries[item.id];
+        const data = {
+          date: item.data.date,
+          title: normalizeTitle(item.data.title),
+          tags: normalizeTags(item.data.tags),
+          content: String(item.data.content ?? ''),
+          progressPercent: normalizePercent(item.data.progressPercent),
+          diagramCode: normalizeDiagram(item.data.diagramCode),
+          svgCode: normalizeSvg(item.data.svgCode),
+        };
+
+        entries[item.id] = current
+          ? { ...current, ...data, blockId: item.blockId, updatedAt: at }
+          : { id: item.id, blockId: item.blockId, ...data, createdAt: at, updatedAt: at };
+      }
+
+      return touch({ ...state, subjects, blocks, entries });
     }
 
     // ─── 설정 / 데이터 전체 ──────────────────────────────────
@@ -292,6 +423,18 @@ export function reducer(state, action) {
 /** 데이터가 바뀐 시각을 남긴다 — '내보내기 필요' 배너의 근거가 된다. */
 function touch(state) {
   return { ...state, settings: { ...state.settings, lastChangeAt: nowIso() } };
+}
+
+/**
+ * 과목 안에서 다음 블록이 받을 order.
+ * 추가·이동 두 곳에서 같은 규칙을 써야 하므로 함수로 뽑았다.
+ */
+function nextBlockOrder(state, subjectId) {
+  return (
+    Object.values(state.blocks)
+      .filter((b) => b.subjectId === subjectId)
+      .reduce((max, b) => Math.max(max, Number(b.order) || 0), -1) + 1
+  );
 }
 
 function omit(obj, key) {
