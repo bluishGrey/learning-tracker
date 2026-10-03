@@ -2055,3 +2055,41 @@
   gap: var(--sp-2);
   margin-bottom: var(--sp-3);
 }
+
+/* ═══ 블록 정보 낡음 표시 ═══════════════════════════════════ */
+
+.stalebadge {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: var(--sp-1) 0 var(--sp-2);
+  padding: 2px var(--sp-2);
+  border: 1px solid var(--warn);
+  border-radius: 999px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 0.74rem;
+  line-height: 1.5;
+  cursor: pointer;
+  text-align: left;
+}
+
+.stalebadge:hover {
+  filter: brightness(1.08);
+}
+
+.stalebadge__why {
+  color: var(--text-dim);
+}
+
+.stalebadge--icon {
+  flex: none;
+  margin: 0;
+  padding: 0;
+  width: 20px;
+  height: 20px;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 0.7rem;
+}

@@ -723,6 +723,51 @@ function entryRows(subject, block, entry) {
   ];
 }
 
+/**
+ * 'Claude에게 블록 갱신 요청' 텍스트 — 낡음 표시를 누르면 클립보드에 담긴다.
+ *
+ * 현재 블록 설명 + 최근 기록 3개(제목·진행률) + 요청문. 답은 ---BLOCK--- 형식으로
+ * 받아야 기록 가져오기에 함께 붙여넣거나 '블록 정보 가져오기'로 바로 되붙일 수 있다.
+ *
+ * ---BLOCK--- 는 빠진 항목을 '지움'으로 읽으므로, 지금 있는 다이어그램·SVG 를 잃지 않도록
+ * 그대로 두라는 문장과 함께 현재 다이어그램 원문을 실어 보낸다 (SVG 는 길어서 유무만 알린다).
+ *
+ * @param {Array<{ date, title?, content?, progressPercent? }>} recentEntries 최신순
+ * @param {(entry) => string} titleOf 표시용 제목 (lib/entryTitle 을 넘긴다)
+ */
+export function buildBlockRefreshRequest(subject, block, recentEntries, titleOf) {
+  const lines = [
+    `아래 학습 블록의 '블록 정보'를 최근 기록에 맞게 갱신해 주세요.`,
+    '',
+    `- 답은 ${BLOCK_MARKER} … ${END_MARKER} 형식 하나로만 주세요. (과목/블록/설명/진행률/다이어그램/SVG)`,
+    `- 과목·블록 이름은 아래와 똑같이 적어 주세요.`,
+    `- 진행률은 최근 기록까지 반영한 0~100 숫자로 적어 주세요.`,
+    `- 빠진 항목은 트래커에서 지워집니다. 바꿀 필요가 없는 다이어그램·SVG 도 지금 것을 그대로 다시 적어 주세요.`,
+    '',
+    '[현재 블록 정보]',
+    `${K.SUBJECT}: ${subject?.name ?? ''}`,
+    `${K.BLOCK}: ${block?.name ?? ''}`,
+    `${K.PROGRESS}: ${block?.progressPercent == null ? '(없음)' : block.progressPercent}`,
+    `${K.DESCRIPTION}:`,
+    String(block?.description ?? '').trim() || '(비어 있음)',
+  ];
+
+  if (String(block?.diagramCode ?? '').trim()) {
+    lines.push('', `${K.DIAGRAM}:`, '```mermaid', block.diagramCode.trim(), '```');
+  }
+  if (String(block?.svgCode ?? '').trim()) {
+    lines.push('', `(${K.SVG} 있음 — ${block.svgCode.trim().length}자. 바꾸지 않을 거면 생략하지 말고 아래 원문을 그대로 넣어 주세요.)`, block.svgCode.trim());
+  }
+
+  lines.push('', `[최근 기록 ${recentEntries.length}개 — 최신순]`);
+  recentEntries.forEach((entry, i) => {
+    const percent = entry.progressPercent == null ? '진행률 없음' : `진행률 ${entry.progressPercent}%`;
+    lines.push(`${i + 1}. ${entry.date} · ${titleOf(entry)} · ${percent}`);
+  });
+
+  return `${lines.join('\n')}\n`;
+}
+
 // ─── 안내 문구용 요약 ──────────────────────────────────────
 
 /** 어떤 항목이 채워져 있는지 (내보내기 알림에 쓴다) */

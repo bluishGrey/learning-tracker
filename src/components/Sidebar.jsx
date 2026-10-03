@@ -4,6 +4,7 @@ import { useStore } from '../state/StoreContext.jsx';
 import { selectBlocks, selectBlockEntries, selectSearch, SEARCH_LIMIT } from '../state/selectors.js';
 import SubjectDot from './SubjectDot.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
+import StaleBadge from './StaleBadge.jsx';
 import { entryTitle } from '../lib/entryTitle.js';
 import { todayKey, monthKeyOf, formatMonthDay } from '../lib/date.js';
 
@@ -231,6 +232,7 @@ function TreeSection({
                               </span>
                               <span className="tree__count">{entries.length}</span>
                             </button>
+                            <StaleBadge subject={subject} block={block} variant="icon" />
                             <Link
                               to={`/subjects/${subject.id}/${block.id}`}
                               className="tree__go"

@@ -20,6 +20,7 @@ import PasteImportSheet from '../components/PasteImportSheet.jsx';
 import ManualCopySheet, { useTextExport } from '../components/ManualCopySheet.jsx';
 import Sheet from '../components/Sheet.jsx';
 import BlockInfoDiff from '../components/BlockInfoDiff.jsx';
+import StaleBadge from '../components/StaleBadge.jsx';
 import NotFound from './NotFound.jsx';
 import {
   parseBlockText,
@@ -161,6 +162,8 @@ export default function BlockView() {
           { label: block.name || '(이름 없음)' },
         ]}
       />
+
+      <StaleBadge subject={subject} block={block} />
 
       <h1 className="page__title">{block.name || '(이름 없음)'}</h1>
       <p className="page__sub">
