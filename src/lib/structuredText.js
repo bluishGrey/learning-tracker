@@ -736,13 +736,19 @@ function entryRows(subject, block, entry) {
  * @param {(entry) => string} titleOf 표시용 제목 (lib/entryTitle 을 넘긴다)
  */
 export function buildBlockRefreshRequest(subject, block, recentEntries, titleOf) {
+  // 규칙은 docs/CLAUDE_AI_GUIDE.md 의 '블록 정보 동기화'와 같다. 한쪽을 고치면 다른 쪽도 고친다.
+  const latest = recentEntries.find((e) => e.progressPercent != null) ?? null;
   const lines = [
     `아래 학습 블록의 '블록 정보'를 최근 기록에 맞게 갱신해 주세요.`,
     '',
-    `- 답은 ${BLOCK_MARKER} … ${END_MARKER} 형식 하나로만 주세요. (과목/블록/설명/진행률/다이어그램/SVG)`,
-    `- 과목·블록 이름은 아래와 똑같이 적어 주세요.`,
-    `- 진행률은 최근 기록까지 반영한 0~100 숫자로 적어 주세요.`,
-    `- 빠진 항목은 트래커에서 지워집니다. 바꿀 필요가 없는 다이어그램·SVG 도 지금 것을 그대로 다시 적어 주세요.`,
+    `- 답은 ${BLOCK_MARKER} … ${END_MARKER} 문서 하나로만 주세요. (이 블록 하나만)`,
+    `- 과목·블록 이름은 아래와 글자 하나까지 똑같이 적어 주세요.`,
+    latest
+      ? `- 진행률은 가장 최근 기록의 진행률과 같은 값(${latest.progressPercent})으로 적어 주세요.`
+      : `- 진행률은 최근 기록까지 반영한 0~100 숫자로 적어 주세요.`,
+    `- 설명은 누적 요약으로 갱신해 주세요: 지금 어디까지 했고, 다음에 할 것이 무엇인지.`,
+    `- 다이어그램의 단계 문구(예: '정독 중' → '완료')를 현재 상태에 맞게 바꿔 주세요.`,
+    `- 트래커는 빠진 항목을 지웁니다. 바뀐 게 없어도 설명·진행률·다이어그램·SVG 를 전부 다시 적어 주세요.`,
     '',
     '[현재 블록 정보]',
     `${K.SUBJECT}: ${subject?.name ?? ''}`,

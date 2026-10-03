@@ -31,6 +31,7 @@ import {
   summarizeSelfInfo,
 } from '../lib/structuredText.js';
 import { planEntriesImport, describePlan } from '../lib/importPlan.js';
+import { blockSyncWarnings } from '../lib/blockSync.js';
 
 /**
  * 경로 B의 세 번째 단계 — 블록 하나.
@@ -125,7 +126,18 @@ export default function BlockView() {
 
     const planned = planEntriesImport(state, parsed.docs, { subjectId, blockId });
     if (!planned.ok) return { ok: false, value: null, errors: planned.errors, warnings: [] };
-    return { ok: true, value: planned, errors: [], warnings: [...parsed.warnings, ...planned.warnings] };
+
+    const syncWarnings = blockSyncWarnings({
+      entries: parsed.docs.filter((d) => d.kind === 'entry').map((d) => d.value),
+      block: parsed.docs.find((d) => d.kind === 'block')?.value ?? null,
+      current: block,
+    });
+    return {
+      ok: true,
+      value: planned,
+      errors: [],
+      warnings: [...parsed.warnings, ...planned.warnings, ...syncWarnings],
+    };
   };
 
   const applyEntries = (planned) => {

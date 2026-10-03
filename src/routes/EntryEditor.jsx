@@ -13,6 +13,7 @@ import { todayKey, isValidDateKey } from '../lib/date.js';
 import { deriveTitleFromContent, entryTitle } from '../lib/entryTitle.js';
 import { parseEntryText, resolveTarget } from '../lib/structuredText.js';
 import { blockPatchOf } from '../lib/importPlan.js';
+import { blockSyncWarnings } from '../lib/blockSync.js';
 
 /**
  * 기록 작성 / 수정.
@@ -152,9 +153,15 @@ export default function EntryEditor() {
       }
     }
 
+    const syncWarnings = blockSyncWarnings({
+      entries: [parsed.value],
+      block: parsed.block,
+      current: state.blocks[target.blockId],
+    });
+
     return {
       ...parsed,
-      warnings: [...parsed.warnings, ...target.warnings, ...dupWarnings],
+      warnings: [...parsed.warnings, ...target.warnings, ...dupWarnings, ...syncWarnings],
       value: {
         ...parsed.value,
         subjectId: target.subjectId,
