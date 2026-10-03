@@ -182,6 +182,55 @@ export function selectBlockProgress(block) {
 }
 
 /**
+ * 블록 화면에 **표시할** 진행률 — 숫자를 새로 계산하지 않고 고르기만 한다.
+ *
+ *   1. 그 블록에서 날짜가 가장 늦은 기록이 가진 진행률 값 그대로.
+ *      같은 날짜면 나중에 만든(가져온) 기록. 진행률을 적지 않은 기록은 건너뛴다
+ *      — 비어 있는 것은 '모름'이지 0% 가 아니다.
+ *   2. 진행률이 적힌 기록이 하나도 없으면 블록에 저장된 값(Block.progressPercent).
+ *
+ * 평균·가중치 같은 앱 자체 계산은 넣지 않는다. 숫자의 출처는 언제나 claude.ai 다.
+ * 고르는 순서가 entriesByBlock 정렬(날짜 → 생성 시각)과 같아서, 진행률 추이 그래프의
+ * 마지막 점과 항상 같은 값이 나온다.
+ *
+ * @returns {{ hasValue: boolean, percent: number, source: 'entry'|'block'|null, entry: object|null }}
+ */
+export function selectBlockDisplayProgress(index, block) {
+  const entries = index.entriesByBlock.get(block?.id) ?? [];
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    const entry = entries[i];
+    const p = Number(entry.progressPercent);
+    if (entry.progressPercent == null || !Number.isFinite(p)) continue;
+    return { hasValue: true, percent: clampPercent(p), source: 'entry', entry };
+  }
+  const stored = selectBlockProgress(block);
+  return { ...stored, source: stored.hasValue ? 'block' : null, entry: null };
+}
+
+/**
+ * 직전 기록보다 진행률이 낮아진 기록들의 id.
+ *
+ * 오류가 아니다 — 범위를 다시 잡았거나 claude.ai 가 기준을 바꿨을 수 있다.
+ * 다만 눈치채지 못하고 지나가면 곤란하니 목록에 작은 표시만 단다.
+ * '직전'은 진행률이 적힌 바로 앞 기록이다 (빈 기록은 비교 대상이 아니다).
+ */
+export function selectProgressDrops(index, blockId) {
+  const drops = new Set();
+  let prev = null;
+  for (const entry of index.entriesByBlock.get(blockId) ?? []) {
+    const p = Number(entry.progressPercent);
+    if (entry.progressPercent == null || !Number.isFinite(p)) continue;
+    if (prev !== null && p < prev) drops.add(entry.id);
+    prev = p;
+  }
+  return drops;
+}
+
+function clampPercent(n) {
+  return Math.min(100, Math.max(0, Math.round(n)));
+}
+
+/**
  * 블록 안의 진행률 추이 — 진행률이 적힌 기록만 날짜순으로 뽑는다.
  *
  * Block.progressPercent(대표값)와 달리 이쪽은 Entry.progressPercent 를 모은 것이다.

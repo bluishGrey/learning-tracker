@@ -1,7 +1,12 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useStore, useActions } from '../state/StoreContext.jsx';
-import { selectBlockEntries, selectBlockProgress, selectBlockTrend } from '../state/selectors.js';
+import {
+  selectBlockEntries,
+  selectBlockDisplayProgress,
+  selectBlockTrend,
+  selectProgressDrops,
+} from '../state/selectors.js';
 import Breadcrumb from '../components/Breadcrumb.jsx';
 import EntryRow from '../components/EntryRow.jsx';
 import Markdown from '../components/Markdown.jsx';
@@ -59,8 +64,10 @@ export default function BlockView() {
   if (!subject || !block || block.subjectId !== subjectId) return <NotFound />;
 
   const entries = selectBlockEntries(index, blockId);
-  const progress = selectBlockProgress(block);
+  // 표시용 진행률: 가장 최근 기록의 값 → 없으면 블록 저장값 (앱이 새로 계산하지 않는다)
+  const progress = selectBlockDisplayProgress(index, block);
   const trend = selectBlockTrend(index, blockId);
+  const drops = selectProgressDrops(index, blockId);
 
   /**
    * 내보내기는 누를 때마다 **지금의 기록을 새로 훑어** 조립한다.
@@ -164,7 +171,10 @@ export default function BlockView() {
           />
           <p className="page__sub">
             블록 진행률 {progress.percent}%{' '}
-            <span className="field__hint">— claude.ai 가 계산해 보내준 값입니다</span>
+            <span className="field__hint">
+              — claude.ai 가 계산해 보내준 값입니다{' '}
+              {progress.source === 'entry' ? '(최근 기록 기준)' : '(블록 정보 기준)'}
+            </span>
           </p>
         </div>
       )}
@@ -251,6 +261,7 @@ export default function BlockView() {
                 <EntryRow
                   entry={entry}
                   showDate
+                  progressDropped={drops.has(entry.id)}
                   to={`/subjects/${subjectId}/${blockId}/e/${entry.id}`}
                 />
               </li>

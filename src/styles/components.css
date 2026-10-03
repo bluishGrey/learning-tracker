@@ -1786,6 +1786,14 @@
   margin-top: var(--sp-2);
 }
 
+/* 직전보다 진행률이 낮아진 기록 — 오류가 아니라 '확인해 보라'는 작은 표시 */
+.entryrow__drop {
+  color: var(--warn);
+  font-size: 0.66rem;
+  line-height: 1;
+  cursor: help;
+}
+
 /* ═══ 주고받기 버튼 묶음 ═══════════════════════════════════ */
 
 /*
