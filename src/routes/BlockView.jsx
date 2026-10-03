@@ -135,12 +135,16 @@ export default function BlockView() {
   };
 
   const applyBlockInfo = (value) => {
-    actions.updateBlock(blockId, {
-      description: value.description,
-      progressPercent: value.progressPercent,
-      diagramCode: value.diagramCode,
-      svgCode: value.svgCode,
-    });
+    actions.updateBlock(
+      blockId,
+      {
+        description: value.description,
+        progressPercent: value.progressPercent,
+        diagramCode: value.diagramCode,
+        svgCode: value.svgCode,
+      },
+      { markInfo: true }
+    );
     actions.setNotice({
       level: 'success',
       message: `${block.name} 블록 정보를 갱신했습니다.`,

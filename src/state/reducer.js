@@ -155,6 +155,8 @@ export function reducer(state, action) {
             progressPercent: normalizePercent(progressPercent),
             diagramCode: normalizeDiagram(diagramCode),
             svgCode: normalizeSvg(svgCode),
+            // 블록 정보(설명·진행률·그림)를 마지막으로 받거나 고친 시각. 이름만 있는 새 블록은 '모름'.
+            infoUpdatedAt: null,
             createdAt: at,
             updatedAt: at,
           },
@@ -176,9 +178,17 @@ export function reducer(state, action) {
       if (p.diagramCode !== undefined) patch.diagramCode = normalizeDiagram(p.diagramCode);
       if (p.svgCode !== undefined) patch.svgCode = normalizeSvg(p.svgCode);
 
+      const at = nowIso();
+      // 블록 정보 갱신 시각: 가져오기(markInfo)는 값이 같아도 '지금 기준으로 확인됨'이라 찍고,
+      // 손으로 고친 경우는 정보 항목이 실제로 바뀌었을 때만 찍는다 (이름·완료만 바꾼 건 아니다).
+      const infoChanged = INFO_FIELDS.some(
+        (key) => Object.hasOwn(patch, key) && patch[key] !== (current[key] ?? defaultInfo(key))
+      );
+      if (action.markInfo || infoChanged) patch.infoUpdatedAt = at;
+
       return touch({
         ...state,
-        blocks: { ...state.blocks, [action.id]: { ...current, ...patch, updatedAt: nowIso() } },
+        blocks: { ...state.blocks, [action.id]: { ...current, ...patch, updatedAt: at } },
       });
     }
 
@@ -357,8 +367,12 @@ export function reducer(state, action) {
           svgCode: normalizeSvg(item.patch.svgCode),
         };
 
+        // ---BLOCK--- 문서로 받은 정보면 갱신 시각을 찍는다. 과목 정보의 '블록 목록'으로
+        // 이름만 만든 뼈대(infoFromDoc === false)는 정보를 받은 게 아니므로 '모름'으로 둔다.
+        const infoUpdatedAt = item.infoFromDoc === false ? (current?.infoUpdatedAt ?? null) : at;
+
         blocks[item.id] = current
-          ? { ...current, ...patch, updatedAt: at }
+          ? { ...current, ...patch, infoUpdatedAt, updatedAt: at }
           : {
               id: item.id,
               subjectId: plan.subjectId,
@@ -367,6 +381,7 @@ export function reducer(state, action) {
               // 새로 만드는 블록이 여럿이면 순번이 겹치지 않게 하나씩 올린다
               order: nextOrder++,
               ...patch,
+              infoUpdatedAt,
               createdAt: at,
               updatedAt: at,
             };
@@ -418,6 +433,14 @@ export function reducer(state, action) {
     default:
       return state;
   }
+}
+
+/** '블록 정보'에 해당하는 항목 — 갱신 시각(infoUpdatedAt)을 찍는 기준 */
+const INFO_FIELDS = ['description', 'progressPercent', 'diagramCode', 'svgCode'];
+
+/** 필드가 없던 예전 데이터와 비교할 때의 기본값 (정규화 결과와 같은 모양) */
+function defaultInfo(key) {
+  return key === 'description' ? '' : null;
 }
 
 /** 데이터가 바뀐 시각을 남긴다 — '내보내기 필요' 배너의 근거가 된다. */

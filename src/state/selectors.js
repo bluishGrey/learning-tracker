@@ -12,6 +12,7 @@ import {
   yearFraction,
   daysInYear,
   parseDateKey,
+  toDateKey,
 } from '../lib/date.js';
 import { activityAlpha, densityAlpha, nextFreeHueIndex } from '../lib/color.js';
 
@@ -228,6 +229,41 @@ export function selectProgressDrops(index, blockId) {
 
 function clampPercent(n) {
   return Math.min(100, Math.max(0, Math.round(n)));
+}
+
+/**
+ * 블록 정보가 기록보다 낡았는가.
+ *
+ * '기록 가져오기'만 쓰다 보면 기록은 쌓이는데 블록 설명·진행률·그림은 그대로 남는다.
+ * 그걸 눈치챌 수 있게 하는 작은 표시의 근거다.
+ *
+ *   - 완료한 블록은 보지 않는다 (더 갱신할 이유가 없다)
+ *   - 기록이 하나도 없으면 비교할 것이 없으므로 낡지 않은 것으로 본다
+ *     (과목 정보의 '블록 목록'으로 미리 만들어 둔 빈 블록까지 전부 표시되면 소음이다)
+ *   - 갱신 시각이 없으면(예전 데이터) '모름' → 낡음
+ *   - 마지막 기록 날짜가 갱신 시각의 날짜보다 **늦으면** 낡음. 같은 날은 낡지 않음
+ *     (기록 날짜에는 시각이 없어서 같은 날 안의 앞뒤는 알 수 없다)
+ *
+ * @returns {{ stale: boolean, reason: 'unknown'|'older'|null, lastEntryDate: string|null, infoDate: string|null }}
+ */
+export function selectBlockStaleness(index, block) {
+  const none = { stale: false, reason: null, lastEntryDate: null, infoDate: null };
+  if (!block || block.isCompleted) return none;
+
+  const entries = index.entriesByBlock.get(block.id) ?? [];
+  if (entries.length === 0) return none;
+
+  let lastEntryDate = entries[0].date;
+  for (const e of entries) if (e.date > lastEntryDate) lastEntryDate = e.date;
+
+  const at = block.infoUpdatedAt ? new Date(block.infoUpdatedAt) : null;
+  if (!at || Number.isNaN(at.getTime())) {
+    return { stale: true, reason: 'unknown', lastEntryDate, infoDate: null };
+  }
+  const infoDate = toDateKey(at);
+  return lastEntryDate > infoDate
+    ? { stale: true, reason: 'older', lastEntryDate, infoDate }
+    : { ...none, lastEntryDate, infoDate };
 }
 
 /**

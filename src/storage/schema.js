@@ -40,6 +40,13 @@ import { normalizeHex } from '../lib/color.js';
  * 진도율의 분모였는데, 사용자가 따로 입력해 두는 값이라 실제 블록 개수와
  * 언제든 어긋날 수 있었다. 분모는 그 과목에 실제로 속한 블록을 세면 나오는
  * 값이므로, 보관하지 않고 매번 센다. 기존에 저장된 값은 버린다.
+ *
+ * ─ 버전을 올리지 않고 '필드만 추가'한 것들 ─
+ *
+ * 아래는 없어도 기본값으로 읽히는 선택 필드라 SCHEMA_VERSION 을 올리지 않았다.
+ * (버전을 올리면 예전 앱이 새 백업을 '더 새로운 버전'이라며 거부한다)
+ *   - Block.infoUpdatedAt (ISO | null) — 블록 정보(설명·진행률·그림)를 마지막으로
+ *     가져오거나 고친 시각. 없으면 '모름'으로 보고 낡음 표시의 근거가 된다.
  */
 export const SCHEMA_VERSION = 5;
 
@@ -121,6 +128,7 @@ export function makeBlock({
     progressPercent: normalizePercent(progressPercent),
     diagramCode: normalizeDiagram(diagramCode),
     svgCode: normalizeSvg(svgCode),
+    infoUpdatedAt: null,
     createdAt: now,
     updatedAt: now,
   };
