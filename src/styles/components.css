@@ -2093,3 +2093,7 @@
   border-radius: 50%;
   font-size: 0.7rem;
 }
+
+.editor__movehint {
+  color: var(--warn);
+}

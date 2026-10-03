@@ -210,9 +210,22 @@ export default function EntryEditor() {
 
     if (isEdit) {
       actions.updateEntry(entryId, payload);
-      navigate(returnTo ?? `/subjects/${form.subjectId}/${form.blockId}/e/${entryId}`, {
-        replace: true,
-      });
+
+      // 블록을 옮겼으면 과목 경로로 돌아가는 주소(/subjects/옛과목/옛블록/e/…)는 더 이상 맞지 않는다.
+      // 캘린더 경로(/day/…)는 날짜만 보므로 그대로 둔다.
+      const moved = existing.blockId !== form.blockId;
+      const backToSubjectPath = !returnTo || returnTo.startsWith('/subjects/');
+      const target =
+        moved && backToSubjectPath
+          ? `/subjects/${form.subjectId}/${form.blockId}/e/${entryId}`
+          : (returnTo ?? `/subjects/${form.subjectId}/${form.blockId}/e/${entryId}`);
+      if (moved) {
+        actions.setNotice({
+          level: 'success',
+          message: `기록을 '${state.subjects[form.subjectId]?.name} / ${state.blocks[form.blockId]?.name}' 로 옮겼습니다.`,
+        });
+      }
+      navigate(target, { replace: true });
     } else {
       const id = actions.addEntry(payload);
       navigate(`/subjects/${form.subjectId}/${form.blockId}/e/${id}`, { replace: true });
@@ -390,6 +403,16 @@ export default function EntryEditor() {
                     추가
                   </button>
                 </div>
+              )}
+
+              {isEdit && existing.blockId !== form.blockId && form.blockId && (
+                <p className="field__hint editor__movehint">
+                  저장하면 이 기록이 &apos;{state.blocks[existing.blockId]?.name}&apos; 에서 &apos;
+                  {state.blocks[form.blockId]?.name}&apos; 블록으로 옮겨집니다.
+                </p>
+              )}
+              {isEdit && existing.blockId === form.blockId && (
+                <p className="field__hint">과목·블록을 바꾸면 이 기록을 다른 블록으로 옮길 수 있습니다.</p>
               )}
 
               <div className="row">
