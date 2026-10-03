@@ -405,12 +405,14 @@ function applyBundlePlan(state, plan) {
 
   for (const item of plan.blocks) {
     const current = blocks[item.id];
-    const patch = {
-      description: String(item.patch.description ?? ''),
-      progressPercent: normalizePercent(item.patch.progressPercent),
-      diagramCode: normalizeDiagram(item.patch.diagramCode),
-      svgCode: normalizeSvg(item.patch.svgCode),
-    };
+    // ---BLOCK--- 는 적은 항목만 바꾼다. undefined(빠진 항목)는 지금 값을 그대로 둔다.
+    // (지우려면 '(지움)' 으로 적어 null/'' 이 들어온다)
+    const p = item.patch;
+    const patch = {};
+    if (p.description !== undefined) patch.description = String(p.description ?? '');
+    if (p.progressPercent !== undefined) patch.progressPercent = normalizePercent(p.progressPercent);
+    if (p.diagramCode !== undefined) patch.diagramCode = normalizeDiagram(p.diagramCode);
+    if (p.svgCode !== undefined) patch.svgCode = normalizeSvg(p.svgCode);
 
     // ---BLOCK--- 문서로 받은 정보면 갱신 시각을 찍는다. 과목 정보의 '블록 목록'으로
     // 이름만 만든 뼈대(infoFromDoc === false)는 정보를 받은 게 아니므로 '모름'으로 둔다.
@@ -425,6 +427,10 @@ function applyBundlePlan(state, plan) {
           isCompleted: false,
           // 새로 만드는 블록이 여럿이면 순번이 겹치지 않게 하나씩 올린다
           order: nextOrder++,
+          description: '',
+          progressPercent: null,
+          diagramCode: null,
+          svgCode: null,
           ...patch,
           infoUpdatedAt,
           createdAt: at,

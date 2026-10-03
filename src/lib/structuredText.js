@@ -33,6 +33,15 @@ export const ENTRY_MARKER = '---ENTRY---';
 export const BLOCK_MARKER = '---BLOCK---';
 export const END_MARKER = '---END---';
 
+/**
+ * 블록 정보에서 '이 항목을 지운다'를 뜻하는 값.
+ *
+ * ---BLOCK--- 는 **적은 항목만 바꾸고 빠진 항목은 그대로 둔다.** 공부하던 채팅의 Claude 는
+ * 트래커에 저장된 다이어그램·SVG 를 본 적이 없어서, 빠진 항목을 지움으로 읽으면 매일 그림이
+ * 지워진다. 정말 지우고 싶을 때만 `다이어그램: (지움)` 처럼 이 값을 적는다.
+ */
+export const CLEAR_TOKEN = '(지움)';
+
 const K = {
   DATE: '날짜',
   SUBJECT: '과목',
@@ -186,9 +195,10 @@ export function parseBlockText(text) {
       subjectName: f[K.SUBJECT],
       blockName: f[K.BLOCK],
       description: f[K.DESCRIPTION],
-      progressPercent: f[K.PROGRESS] ?? null,
-      diagramCode: f[K.DIAGRAM] ?? '',
-      svgCode: f[K.SVG] ?? '',
+      // 없는 항목은 undefined(그대로 둠), '(지움)' 은 null/''(비움)
+      progressPercent: keepOrClear(f, K.PROGRESS, null),
+      diagramCode: keepOrClear(f, K.DIAGRAM, ''),
+      svgCode: keepOrClear(f, K.SVG, ''),
     },
     errors: [],
     warnings: parsed.warnings,
@@ -238,7 +248,7 @@ export function parseSubjectText(text) {
  * 복사가 조금 어긋나도 앞 문서까지는 살린다.
  */
 function sliceDocuments(text) {
-  const lines = String(text ?? '').replace(/\r\n?/g, '\n').split('\n');
+  const lines = unwrapOuterFences(String(text ?? '').replace(/\r\n?/g, '\n').split('\n'));
   const byMarker = new Map(Object.entries(FORMS).map(([name, form]) => [form.marker, name]));
 
   const docs = [];
@@ -265,6 +275,52 @@ function sliceDocuments(text) {
 
   if (open) docs.push({ ...open, bodyLines: lines.slice(open.from) });
   return { lines, docs };
+}
+
+/**
+ * 문서들을 감싼 코드블록 펜스를 걷어낸다.
+ *
+ * claude.ai 는 복사하기 쉽게 답 전체를 코드블록(```` 나 ```text)으로 감싸 주곤 한다.
+ * 그 펜스가 남아 있으면 아래 규칙("코드펜스 안의 줄은 마커가 아니다") 때문에 문서가 하나도
+ * 안 읽힌다. 그래서 **감싸는 펜스**로 보이는 줄만 빈 줄로 바꾼다.
+ *   - 문서 바깥(마커 ~ ---END--- 사이가 아닌 곳)에 있고,
+ *   - 백틱 4개 이상이거나, 바로 다음(빈 줄 제외) 줄이 문서 시작 마커이거나,
+ *     바로 앞 줄이 ---END--- 인 펜스
+ * 문서 안의 펜스(내용 속 예시, mermaid)는 건드리지 않는다.
+ * 줄 수는 그대로 둔다 — 오류 메시지의 'N번째 줄'이 붙여넣은 텍스트와 맞아야 한다.
+ */
+function unwrapOuterFences(lines) {
+  const markers = new Set(Object.values(FORMS).map((f) => f.marker));
+  const fence = /^\s*(`{3,})[\w-]*\s*$/;
+  const neighbor = (from, step) => {
+    for (let i = from + step; i >= 0 && i < lines.length; i += step) {
+      const t = lines[i].trim();
+      if (t) return t;
+    }
+    return '';
+  };
+
+  // 문서 안(마커 ~ ---END---)의 펜스는 내용의 일부다. 감싸는 펜스는 문서 바깥에만 있다.
+  let inDoc = false;
+  let inFence = false;
+  return lines.map((line, i) => {
+    const m = fence.exec(line);
+    if (m) {
+      const wrapper =
+        !inDoc &&
+        !inFence &&
+        (m[1].length >= 4 || markers.has(neighbor(i, 1)) || neighbor(i, -1) === END_MARKER);
+      if (wrapper) return '';
+      inFence = !inFence;
+      return line;
+    }
+    if (!inFence) {
+      const t = line.trim();
+      if (markers.has(t)) inDoc = true;
+      else if (t === END_MARKER) inDoc = false;
+    }
+    return line;
+  });
 }
 
 /**
@@ -315,6 +371,15 @@ function parseBody(body, form) {
     fields[key] = value;
   }
 
+  // ─ '(지움)' — 항목은 있되 값을 비운다 (아래 변환을 거치지 않게 먼저 걷어 둔다) ─
+  const cleared = new Set();
+  for (const key of [K.PROGRESS, K.DIAGRAM, K.SVG]) {
+    if (fields[key] === CLEAR_TOKEN) {
+      cleared.add(key);
+      delete fields[key];
+    }
+  }
+
   // ─ 필수 항목 ─
   const missing = form.required.filter((key) => !Object.hasOwn(fields, key));
   if (missing.length > 0) {
@@ -345,7 +410,7 @@ function parseBody(body, form) {
     }
   }
 
-  if (Object.hasOwn(fields, K.DIAGRAM)) {
+  if (Object.hasOwn(fields, K.DIAGRAM) && fields[K.DIAGRAM] !== null) {
     fields[K.DIAGRAM] = stripCodeFence(fields[K.DIAGRAM]);
     if (fields[K.DIAGRAM].length === 0) delete fields[K.DIAGRAM];
   }
@@ -354,6 +419,7 @@ function parseBody(body, form) {
     return { ok: false, value: null, fields: null, errors, warnings };
   }
 
+  for (const key of cleared) fields[key] = null;
   return { ok: true, value: null, fields, errors, warnings };
 }
 
@@ -430,9 +496,10 @@ function toValue(kind, f) {
       subjectName: f[K.SUBJECT],
       blockName: f[K.BLOCK],
       description: f[K.DESCRIPTION],
-      progressPercent: f[K.PROGRESS] ?? null,
-      diagramCode: f[K.DIAGRAM] ?? '',
-      svgCode: f[K.SVG] ?? '',
+      // 없는 항목은 undefined(그대로 둠), '(지움)' 은 null/''(비움)
+      progressPercent: keepOrClear(f, K.PROGRESS, null),
+      diagramCode: keepOrClear(f, K.DIAGRAM, ''),
+      svgCode: keepOrClear(f, K.SVG, ''),
     };
   }
   return {
@@ -446,6 +513,12 @@ function toValue(kind, f) {
     diagramCode: f[K.DIAGRAM] ?? '',
     svgCode: f[K.SVG] ?? '',
   };
+}
+
+/** 블록 정보 항목: 없으면 undefined(그대로 둠), '(지움)'이면 cleared 값, 아니면 그 값 */
+function keepOrClear(f, key, cleared) {
+  if (!Object.hasOwn(f, key)) return undefined;
+  return f[key] === null ? cleared : f[key];
 }
 
 /** 시작 표시가 없을 때 — 다른 형식을 붙여넣은 경우를 따로 짚어준다 */
@@ -729,8 +802,8 @@ function entryRows(subject, block, entry) {
  * 현재 블록 설명 + 최근 기록 3개(제목·진행률) + 요청문. 답은 ---BLOCK--- 형식으로
  * 받아야 기록 가져오기에 함께 붙여넣거나 '블록 정보 가져오기'로 바로 되붙일 수 있다.
  *
- * ---BLOCK--- 는 빠진 항목을 '지움'으로 읽으므로, 지금 있는 다이어그램·SVG 를 잃지 않도록
- * 그대로 두라는 문장과 함께 현재 다이어그램 원문을 실어 보낸다 (SVG 는 길어서 유무만 알린다).
+ * ---BLOCK--- 는 적힌 항목만 바꾸므로 그림을 다시 적을 필요는 없다. 다만 다이어그램의 단계 문구를
+ * 고치려면 원문이 있어야 하므로 현재 다이어그램은 실어 보낸다 (SVG 는 유무만 알린다).
  *
  * @param {Array<{ date, title?, content?, progressPercent? }>} recentEntries 최신순
  * @param {(entry) => string} titleOf 표시용 제목 (lib/entryTitle 을 넘긴다)
@@ -748,7 +821,8 @@ export function buildBlockRefreshRequest(subject, block, recentEntries, titleOf)
       : `- 진행률은 최근 기록까지 반영한 0~100 숫자로 적어 주세요.`,
     `- 설명은 누적 요약으로 갱신해 주세요: 지금 어디까지 했고, 다음에 할 것이 무엇인지.`,
     `- 다이어그램의 단계 문구(예: '정독 중' → '완료')를 현재 상태에 맞게 바꿔 주세요.`,
-    `- 트래커는 빠진 항목을 지웁니다. 바뀐 게 없어도 설명·진행률·다이어그램·SVG 를 전부 다시 적어 주세요.`,
+    `- 적지 않은 항목은 트래커가 그대로 둡니다. 바꿀 항목만 적고, 지워야 할 항목만 '${CLEAR_TOKEN}' 이라고 적어 주세요.`,
+    `- 다이어그램을 바꿀 때는 일부가 아니라 전체 다이어그램을 적어 주세요.`,
     '',
     '[현재 블록 정보]',
     `${K.SUBJECT}: ${subject?.name ?? ''}`,
@@ -762,7 +836,7 @@ export function buildBlockRefreshRequest(subject, block, recentEntries, titleOf)
     lines.push('', `${K.DIAGRAM}:`, '```mermaid', block.diagramCode.trim(), '```');
   }
   if (String(block?.svgCode ?? '').trim()) {
-    lines.push('', `(${K.SVG} 있음 — ${block.svgCode.trim().length}자. 바꾸지 않을 거면 생략하지 말고 아래 원문을 그대로 넣어 주세요.)`, block.svgCode.trim());
+    lines.push('', `(${K.SVG} 있음 — 바꾸지 않을 거면 적지 않아도 그대로 남습니다.)`);
   }
 
   lines.push('', `[최근 기록 ${recentEntries.length}개 — 최신순]`);

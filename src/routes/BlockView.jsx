@@ -321,7 +321,7 @@ export default function BlockView() {
         open={importing === 'info'}
         onClose={() => setImporting(null)}
         title="블록 정보 가져오기"
-        hint={`claude.ai 가 만들어 준 ---BLOCK--- 형식 텍스트를 그대로 붙여넣으세요. '${subject.name} / ${block.name}' 의 설명·진행률·다이어그램·SVG 를 덮어씁니다.`}
+        hint={`claude.ai 가 만들어 준 ---BLOCK--- 형식 텍스트를 그대로 붙여넣으세요. '${subject.name} / ${block.name}' 의 설명·진행률·다이어그램·SVG 중 적힌 항목을 덮어씁니다. 적히지 않은 항목은 그대로 두고, 지우려면 '(지움)' 이라고 적습니다.`}
         placeholder={'---BLOCK---\n과목: ' + subject.name + '\n블록: ' + block.name + '\n\n설명:\n…\n---END---'}
         parse={readBlockInfo}
         applyLabel="블록 정보 갱신"
@@ -409,11 +409,13 @@ function EntriesPlanPreview({ planned }) {
 
 /** 가져오기 직전에 보여줄 요약 — 무엇이 덮어써지는지 한눈에 */
 function BlockInfoPreview({ value }) {
+  // 적히지 않은 항목(undefined)은 그대로 두고, '(지움)'으로 적힌 항목만 비운다
+  const show = (v, fmt) => (v === undefined ? '그대로 (적히지 않음)' : v === null || v === '' ? '지움' : fmt(v));
   const rows = [
     ['설명', `${value.description.split('\n').length}줄`],
-    ['진행률', value.progressPercent == null ? '없음 (지움)' : `${value.progressPercent}%`],
-    ['다이어그램', value.diagramCode ? `${value.diagramCode.split('\n').length}줄` : '없음 (지움)'],
-    ['SVG', value.svgCode ? `${value.svgCode.length}자` : '없음 (지움)'],
+    ['진행률', show(value.progressPercent, (v) => `${v}%`)],
+    ['다이어그램', show(value.diagramCode, (v) => `${v.split('\n').length}줄`)],
+    ['SVG', show(value.svgCode, (v) => `${v.length}자`)],
   ];
 
   return (
