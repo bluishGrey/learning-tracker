@@ -2097,3 +2097,45 @@
 .editor__movehint {
   color: var(--warn);
 }
+
+/* ═══ 헷갈림 행 검색 결과 ═══════════════════════════════════ */
+
+.hl {
+  background: var(--warn-soft);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+  box-shadow: 0 0 0 1px var(--warn);
+}
+
+.searchresults__answer {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.76rem;
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+
+/* 기록 화면: 검색·복습에서 온 행을 잠깐 강조 */
+.confusion-flash > td {
+  animation: confusion-flash 2.4s ease-out;
+}
+
+@keyframes confusion-flash {
+  0%,
+  35% {
+    background: var(--warn-soft);
+    box-shadow: inset 0 0 0 9999px var(--warn-soft);
+  }
+  100% {
+    background: transparent;
+    box-shadow: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confusion-flash > td {
+    animation: none;
+    background: var(--warn-soft);
+  }
+}

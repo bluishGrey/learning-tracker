@@ -15,6 +15,7 @@ import {
   toDateKey,
 } from '../lib/date.js';
 import { activityAlpha, densityAlpha, nextFreeHueIndex } from '../lib/color.js';
+import { confusionRowsOf, rowMatches } from '../lib/confusionTable.js';
 
 /**
  * 밀도 계산 시 적용할 최소 기간.
@@ -301,11 +302,14 @@ export const SEARCH_LIMIT = 20;
  *
  * 대소문자를 구분하지 않고 부분 일치로 찾는다. 기록은 제목과 내용을 모두 보되,
  * 내용에서 걸린 경우에는 걸린 자리 주변을 잘라 미리보기로 돌려준다.
+ *
+ * 그와 별도로 기록 본문의 '헷갈렸던 부분 정리' 표를 행 단위로 읽어(lib/confusionTable.js)
+ * 모든 열(#·헷갈린 것·정답 요약·키워드)을 찾는다. 기록 단위 결과는 예전과 똑같이 둔다.
  */
 export function selectSearch(state, index, rawQuery, limit = SEARCH_LIMIT) {
   const query = String(rawQuery ?? '').trim();
   if (query.length === 0) {
-    return { query: '', isEmpty: true, total: 0, subjects: [], blocks: [], entries: [] };
+    return { query: '', isEmpty: true, total: 0, confusions: [], subjects: [], blocks: [], entries: [] };
   }
 
   const needle = query.toLowerCase();
@@ -314,6 +318,8 @@ export function selectSearch(state, index, rawQuery, limit = SEARCH_LIMIT) {
   const subjects = [];
   const blocks = [];
   const entries = [];
+  /** '헷갈렸던 부분 정리' 표의 행 단위 결과 — 기록 단위 결과와 따로 센다 */
+  const confusions = [];
 
   for (const id of state.subjectOrder) {
     const subject = state.subjects[id];
@@ -332,6 +338,10 @@ export function selectSearch(state, index, rawQuery, limit = SEARCH_LIMIT) {
       }
 
       for (const entry of index.entriesByBlock.get(block.id) ?? []) {
+        for (const row of confusionRowsOf(entry)) {
+          if (rowMatches(row, needle)) confusions.push({ entry, block, subject, row });
+        }
+
         const inTitle = hit(entry.title);
         const inContent = hit(entry.content);
         const inTags = (entry.tags ?? []).some(hit);
@@ -348,13 +358,18 @@ export function selectSearch(state, index, rawQuery, limit = SEARCH_LIMIT) {
 
   // 기록은 최신순이 유용하다 (과목·블록은 트리 순서를 유지한다)
   entries.sort((a, b) => byDateThenCreated(b.entry, a.entry));
+  // 헷갈림 행도 최신 기록부터, 같은 기록 안에서는 표의 순서대로
+  confusions.sort(
+    (a, b) => byDateThenCreated(b.entry, a.entry) || a.row.rowIndex - b.row.rowIndex
+  );
 
-  const total = subjects.length + blocks.length + entries.length;
+  const total = confusions.length + subjects.length + blocks.length + entries.length;
   return {
     query,
     isEmpty: false,
     total,
-    truncated: total > limit * 3,
+    truncated: [confusions, subjects, blocks, entries].some((list) => list.length > limit),
+    confusions: confusions.slice(0, limit),
     subjects: subjects.slice(0, limit),
     blocks: blocks.slice(0, limit),
     entries: entries.slice(0, limit),

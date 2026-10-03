@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useRef, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useStore, useActions } from '../state/StoreContext.jsx';
 import { selectEntryContext } from '../state/selectors.js';
 import Breadcrumb from '../components/Breadcrumb.jsx';
@@ -11,6 +11,7 @@ import ManualCopySheet, { useTextExport } from '../components/ManualCopySheet.js
 import NotFound from './NotFound.jsx';
 import { entryTitle } from '../lib/entryTitle.js';
 import { buildEntryText } from '../lib/structuredText.js';
+import { useConfusionRowFocus } from '../lib/useConfusionRowFocus.js';
 import {
   formatFullDate,
   formatMonthDay,
@@ -33,6 +34,12 @@ export default function EntryView() {
   const location = useLocation();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const { exportText, manualCopyProps } = useTextExport(actions.setNotice);
+
+  // 검색·복습 카드에서 헷갈림 행을 눌러 왔으면 (?row=N) 표의 그 행으로 스크롤해 잠깐 강조한다
+  const [searchParams] = useSearchParams();
+  const rowParam = searchParams.get('row');
+  const contentRef = useRef(null);
+  useConfusionRowFocus(contentRef, rowParam === null ? null : Number(rowParam), location.key);
 
   const context = selectEntryContext(state, entryId);
   if (!context) return <NotFound />;
@@ -113,7 +120,7 @@ export default function EntryView() {
         </div>
       )}
 
-      <article className="section entryview__content">
+      <article className="section entryview__content" ref={contentRef}>
         {entry.content?.trim() ? (
           <Markdown>{entry.content}</Markdown>
         ) : (
