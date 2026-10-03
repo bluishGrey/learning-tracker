@@ -41,7 +41,7 @@ export default function StaleBadge({ subject, block, variant = 'banner' }) {
     const recent = [...selectBlockEntries(index, block.id)].reverse().slice(0, RECENT_COUNT);
     exportText(
       buildBlockRefreshRequest(subject, block, recent, entryTitle),
-      `'${block.name}' 블록 갱신 요청문을 복사했습니다. claude.ai 에 붙여넣고, 받은 ---BLOCK--- 를 기록 가져오기에 함께 넣거나 '블록 정보 가져오기'로 붙여넣으세요.`
+      `'${block.name}' 블록 갱신 요청문을 복사했습니다. claude.ai 에 붙여넣고, 받은 ---BLOCK--- 를 '오늘 기록 붙여넣기'나 '블록 정보 가져오기'로 붙여넣으세요.`
     );
   };
 
