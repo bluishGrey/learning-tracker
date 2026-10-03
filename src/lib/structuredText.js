@@ -26,7 +26,7 @@
  */
 
 import { isValidDateKey } from './date.js';
-import { findByName } from './nameMatch.js';
+import { findByName, nameKey } from './nameMatch.js';
 
 export const SUBJECT_MARKER = '---SUBJECT---';
 export const ENTRY_MARKER = '---ENTRY---';
@@ -85,47 +85,90 @@ const FORMS = {
 /**
  * ---ENTRY--- 텍스트 → 기록 입력 폼에 채울 값.
  *
- * @returns {{ ok: boolean, value: object|null, errors: string[], warnings: string[] }}
+ * 같은 텍스트 안에 그 기록이 속한 블록의 ---BLOCK--- 문서가 **하나** 함께 있으면
+ * 그것도 읽어 `block` 으로 돌려준다. 형식은 '블록 정보 가져오기'와 똑같다.
+ * 기록만 가져오다 보면 블록 설명·진행률·그림이 낡는데, claude.ai 에게 한 번에
+ * 받아 한 번에 붙여넣을 수 있게 하기 위해서다. 없으면 block 은 null — 예전과 같다.
+ *
+ * @returns {{ ok: boolean, value: object|null, block: object|null, errors: string[], warnings: string[] }}
  */
 export function parseEntryText(text) {
   const parsed = parseDocuments(text);
   if (!parsed.ok) {
-    return { ok: false, value: null, errors: parsed.errors, warnings: parsed.warnings };
+    return { ok: false, value: null, block: null, errors: parsed.errors, warnings: parsed.warnings };
   }
 
   const entries = parsed.docs.filter((d) => d.kind === 'entry');
-  const others = parsed.docs.filter((d) => d.kind !== 'entry');
+  const blocks = parsed.docs.filter((d) => d.kind === 'block');
+  const others = parsed.docs.filter((d) => d.kind !== 'entry' && d.kind !== 'block');
+  const fail = (errors) => ({ ok: false, value: null, block: null, errors, warnings: [] });
 
   if (entries.length === 0) {
-    return { ok: false, value: null, errors: [describeMissingMarker(others, FORMS.entry)], warnings: [] };
+    return fail([describeMissingMarker(parsed.docs, FORMS.entry)]);
   }
 
   // '새 기록' 은 이름 그대로 기록 하나를 다루는 화면이다. 여러 개가 한꺼번에
   // 반영되면 방금 무엇이 들어갔는지 화면에서 확인할 길이 없다.
   // 여러 기록은 그 목록을 이미 보여주고 있는 블록 상세에서 받는다.
   if (entries.length > 1) {
-    return {
-      ok: false,
-      value: null,
-      errors: [
-        `기록이 ${entries.length}개 들어 있습니다. 새 기록 화면에서는 기록 하나만 가져올 수 있습니다. 여러 개를 한 번에 가져오려면 블록 페이지의 '기록 전체 가져오기' 를 이용하세요.`,
-      ],
-      warnings: [],
-    };
+    return fail([
+      `기록이 ${entries.length}개 들어 있습니다. 새 기록 화면에서는 기록 하나만 가져올 수 있습니다. 여러 개를 한 번에 가져오려면 블록 페이지의 '기록 전체 가져오기' 를 이용하세요.`,
+    ]);
   }
 
   if (others.length > 0) {
+    return fail([
+      `기록 외에 ${others.map((d) => FORMS[d.kind].label).join(', ')} 형식이 함께 들어 있습니다. 새 기록 화면에서는 기록 하나(와 그 블록의 블록 정보)만 가져올 수 있습니다.`,
+    ]);
+  }
+
+  const blockCheck = checkCompanionBlock(blocks, entries);
+  if (!blockCheck.ok) return fail(blockCheck.errors);
+
+  return {
+    ok: true,
+    value: entries[0].value,
+    block: blockCheck.block,
+    errors: [],
+    warnings: parsed.warnings,
+  };
+}
+
+/**
+ * 기록과 함께 붙여넣은 ---BLOCK--- 문서 검사 — 기록 가져오기 두 곳(새 기록·기록 전체)이 같이 쓴다.
+ *
+ * 하나까지만 받고, 그 블록이 기록들이 가리키는 블록과 **같아야** 한다(공백·대소문자 무시).
+ * 다른 블록의 정보가 섞여 들어와 엉뚱한 블록을 덮어쓰는 사고를 막는다.
+ *
+ * @returns {{ ok: boolean, block: object|null, errors: string[] }}
+ */
+export function checkCompanionBlock(blockDocs, entryDocs) {
+  if (blockDocs.length === 0) return { ok: true, block: null, errors: [] };
+  if (blockDocs.length > 1) {
     return {
       ok: false,
-      value: null,
-      errors: [
-        `기록 외에 ${others.map((d) => FORMS[d.kind].label).join(', ')} 형식이 함께 들어 있습니다. 새 기록 화면에서는 기록 하나만 가져올 수 있습니다.`,
-      ],
-      warnings: [],
+      block: null,
+      errors: [`블록 정보(${BLOCK_MARKER})가 ${blockDocs.length}개 있습니다. 기록 가져오기에는 그 기록의 블록 정보 하나만 함께 넣을 수 있습니다.`],
     };
   }
 
-  return { ok: true, value: entries[0].value, errors: [], warnings: parsed.warnings };
+  const doc = blockDocs[0];
+  const wantSubject = nameKey(doc.value.subjectName);
+  const wantBlock = nameKey(doc.value.blockName);
+  const mismatched = entryDocs.filter(
+    (e) => nameKey(e.value.subjectName) !== wantSubject || nameKey(e.value.blockName) !== wantBlock
+  );
+  if (mismatched.length > 0) {
+    const e = mismatched[0].value;
+    return {
+      ok: false,
+      block: null,
+      errors: [
+        `${doc.line}번째 줄의 블록 정보는 '${doc.value.subjectName} / ${doc.value.blockName}' 의 것인데, 기록은 '${e.subjectName} / ${e.blockName}' 소속입니다. 같은 블록의 정보만 함께 가져올 수 있습니다.`,
+      ],
+    };
+  }
+  return { ok: true, block: doc.value, errors: [] };
 }
 
 /**

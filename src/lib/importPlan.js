@@ -28,6 +28,7 @@
 
 import { newId } from './id.js';
 import { nameKey, findByName } from './nameMatch.js';
+import { checkCompanionBlock } from './structuredText.js';
 
 /**
  * 블록 하나에 기록들을 몰아넣는 계획 — 블록 상세의 '기록 전체 가져오기'.
@@ -43,13 +44,23 @@ export function planEntriesImport(state, docs, { subjectId, blockId }) {
   }
 
   const errors = [];
-  const wrongKind = docs.filter((d) => d.kind !== 'entry');
+  // 그 블록 자신의 ---BLOCK--- 문서 하나는 함께 받는다 (블록 정보 동기화).
+  // 과목 정보나 다른 블록의 정보는 이 화면의 일이 아니다.
+  const wrongKind = docs.filter((d) => d.kind !== 'entry' && d.kind !== 'block');
   if (wrongKind.length > 0) {
     errors.push(
-      `기록(---ENTRY---) 형식만 가져올 수 있습니다. ${wrongKind.length}개의 다른 형식이 섞여 있습니다. (${wrongKind
-        .map((d) => `${d.line}번째 줄 ${d.kind === 'subject' ? '과목' : '블록'} 정보`)
+      `기록(---ENTRY---)과 이 블록의 블록 정보(---BLOCK---)만 가져올 수 있습니다. 과목 정보가 섞여 있습니다. (${wrongKind
+        .map((d) => `${d.line}번째 줄`)
         .join(', ')})`
     );
+  }
+  const blockDocs = docs.filter((d) => d.kind === 'block');
+  for (const doc of blockDocs) {
+    if (nameKey(doc.value.subjectName) !== nameKey(subject.name) || nameKey(doc.value.blockName) !== nameKey(block.name)) {
+      errors.push(
+        `${doc.line}번째 줄의 블록 정보는 '${doc.value.subjectName} / ${doc.value.blockName}' 의 것입니다. 지금 보고 있는 '${subject.name} / ${block.name}' 에는 반영할 수 없습니다.`
+      );
+    }
   }
 
   const entryDocs = docs.filter((d) => d.kind === 'entry');
@@ -69,8 +80,25 @@ export function planEntriesImport(state, docs, { subjectId, blockId }) {
 
   if (errors.length > 0) return fail(errors);
 
+  const companion = checkCompanionBlock(blockDocs, entryDocs);
+  if (!companion.ok) return fail(companion.errors);
+
+  const blocks = companion.block
+    ? [{ id: blockId, name: block.name, patch: blockPatchOf(companion.block), isNew: false, infoFromDoc: true }]
+    : [];
+
   const entries = planEntries(state, entryDocs, () => blockId);
-  return done({ subjectId, subjectPatch: null, blocks: [], entries });
+  return done({ subjectId, subjectPatch: null, blocks, entries });
+}
+
+/** ---BLOCK--- 문서 값 → 블록에 덮어쓸 정보 (블록 정보 가져오기와 같은 네 항목) */
+export function blockPatchOf(value) {
+  return {
+    description: value.description,
+    progressPercent: value.progressPercent,
+    diagramCode: value.diagramCode,
+    svgCode: value.svgCode,
+  };
 }
 
 /**
@@ -147,12 +175,7 @@ export function planSubjectImport(state, docs, { subjectId }) {
       errors.push(`${doc.line}번째 줄: 블록 이름이 비어 있습니다.`);
       continue;
     }
-    const patch = {
-      description: doc.value.description,
-      progressPercent: doc.value.progressPercent,
-      diagramCode: doc.value.diagramCode,
-      svgCode: doc.value.svgCode,
-    };
+    const patch = blockPatchOf(doc.value);
 
     const hit = lookup(name, doc.line);
     if (hit === null) continue;

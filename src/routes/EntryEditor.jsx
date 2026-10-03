@@ -7,10 +7,12 @@ import TagInput from '../components/TagInput.jsx';
 import DiagramEmbed from '../components/DiagramEmbed.jsx';
 import SvgEmbed from '../components/SvgEmbed.jsx';
 import PasteImportSheet from '../components/PasteImportSheet.jsx';
+import BlockInfoDiff, { changedBlockFields } from '../components/BlockInfoDiff.jsx';
 import NotFound from './NotFound.jsx';
 import { todayKey, isValidDateKey } from '../lib/date.js';
 import { deriveTitleFromContent, entryTitle } from '../lib/entryTitle.js';
 import { parseEntryText, resolveTarget } from '../lib/structuredText.js';
+import { blockPatchOf } from '../lib/importPlan.js';
 
 /**
  * 기록 작성 / 수정.
@@ -80,6 +82,12 @@ export default function EntryEditor() {
   const [newSubjectName, setNewSubjectName] = useState('');
   const [preview, setPreview] = useState({ diagram: false, svg: false });
   const [importing, setImporting] = useState(false);
+  /**
+   * 가져온 텍스트에 함께 들어 있던 블록 정보. 폼과 마찬가지로 **기록을 저장할 때** 반영한다
+   * — 가져오기는 채우기만 하고 저장은 사용자가 누른다는 이 화면의 규칙을 그대로 따른다.
+   * @type {[{ blockId: string, patch: object }|null, Function]}
+   */
+  const [pendingBlockInfo, setPendingBlockInfo] = useState(null);
   const formRef = useRef(null);
 
   if (isEdit && !existing) return <NotFound />;
@@ -147,7 +155,13 @@ export default function EntryEditor() {
     return {
       ...parsed,
       warnings: [...parsed.warnings, ...target.warnings, ...dupWarnings],
-      value: { ...parsed.value, subjectId: target.subjectId, blockId: target.blockId },
+      value: {
+        ...parsed.value,
+        subjectId: target.subjectId,
+        blockId: target.blockId,
+        // 함께 온 ---BLOCK--- 는 기록과 같은 블록임을 파서가 이미 확인했다
+        blockInfo: parsed.block ? { blockId: target.blockId, patch: blockPatchOf(parsed.block) } : null,
+      },
     };
   };
 
@@ -164,9 +178,12 @@ export default function EntryEditor() {
       svgCode: value.svgCode,
     });
     setAddingBlock(false);
+    setPendingBlockInfo(value.blockInfo);
     actions.setNotice({
       level: 'success',
-      message: '가져온 내용으로 폼을 채웠습니다. 확인한 뒤 저장을 눌러 주세요.',
+      message: value.blockInfo
+        ? '가져온 내용으로 폼을 채웠습니다. 저장하면 블록 정보도 함께 갱신됩니다.'
+        : '가져온 내용으로 폼을 채웠습니다. 확인한 뒤 저장을 눌러 주세요.',
     });
   };
 
@@ -186,6 +203,10 @@ export default function EntryEditor() {
       diagramCode: form.diagramCode.trim() || null,
       svgCode: form.svgCode.trim() || null,
     };
+
+    if (pendingBlockInfo && state.blocks[pendingBlockInfo.blockId]) {
+      actions.updateBlock(pendingBlockInfo.blockId, pendingBlockInfo.patch, { markInfo: true });
+    }
 
     if (isEdit) {
       actions.updateEntry(entryId, payload);
@@ -240,6 +261,25 @@ export default function EntryEditor() {
           claude.ai 가 만들어 준 ---ENTRY--- 텍스트를 붙여넣으면 아래 칸이 한 번에 채워집니다.
         </p>
       </div>
+
+      {pendingBlockInfo && state.blocks[pendingBlockInfo.blockId] && (
+        <div className="callout callout--info editor__blockinfo">
+          <strong>
+            저장하면 &apos;{state.blocks[pendingBlockInfo.blockId].name}&apos; 블록 정보도 함께 갱신됩니다.
+          </strong>{' '}
+          <span className="field__hint">
+            ({changedBlockFields(state.blocks[pendingBlockInfo.blockId], pendingBlockInfo.patch).join(' · ') ||
+              '내용 변화 없음, 갱신 시각만 기록'})
+          </span>
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            onClick={() => setPendingBlockInfo(null)}
+          >
+            블록 정보는 반영 안 함
+          </button>
+        </div>
+      )}
 
       <form ref={formRef} onSubmit={submit} onKeyDown={handleFormKeyDown}>
         <div className="field">
@@ -519,12 +559,19 @@ export default function EntryEditor() {
         open={importing}
         onClose={() => setImporting(false)}
         title="기록 가져오기"
-        hint="claude.ai 가 만들어 준 ---ENTRY--- 형식 텍스트를 그대로 붙여넣으세요. 폼의 각 칸을 채우기만 하고, 저장은 직접 누르셔야 합니다."
+        hint="claude.ai 가 만들어 준 ---ENTRY--- 형식 텍스트를 그대로 붙여넣으세요. 그 블록의 ---BLOCK--- (블록 정보) 문서를 함께 넣으면 블록 정보도 갱신합니다. 폼의 각 칸을 채우기만 하고, 저장은 직접 누르셔야 합니다."
         placeholder={'---ENTRY---\n날짜: 2026-09-18\n과목: 수학\n블록: 3주차\n\n내용:\n…\n---END---'}
         parse={readEntry}
         applyLabel="폼에 채우기"
         onApply={applyEntry}
-        renderPreview={(value) => <EntryPreview value={value} state={state} />}
+        renderPreview={(value) => (
+          <>
+            <EntryPreview value={value} state={state} />
+            {value.blockInfo && (
+              <BlockInfoDiff block={state.blocks[value.blockInfo.blockId]} patch={value.blockInfo.patch} />
+            )}
+          </>
+        )}
       />
     </main>
   );

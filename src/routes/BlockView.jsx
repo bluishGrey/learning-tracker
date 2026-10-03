@@ -19,6 +19,7 @@ import ExchangeBar from '../components/ExchangeBar.jsx';
 import PasteImportSheet from '../components/PasteImportSheet.jsx';
 import ManualCopySheet, { useTextExport } from '../components/ManualCopySheet.jsx';
 import Sheet from '../components/Sheet.jsx';
+import BlockInfoDiff from '../components/BlockInfoDiff.jsx';
 import NotFound from './NotFound.jsx';
 import {
   parseBlockText,
@@ -318,12 +319,19 @@ export default function BlockView() {
         open={importing === 'entries'}
         onClose={() => setImporting(null)}
         title="기록 전체 가져오기"
-        hint={`---ENTRY--- 문서가 여러 개 이어진 텍스트를 붙여넣으세요. 모두 '${subject.name} / ${block.name}' 소속이어야 하고, 같은 날짜·제목의 기록은 갱신합니다.`}
+        hint={`---ENTRY--- 문서가 여러 개 이어진 텍스트를 붙여넣으세요. 모두 '${subject.name} / ${block.name}' 소속이어야 하고, 같은 날짜·제목의 기록은 갱신합니다. 이 블록의 ---BLOCK--- 문서를 함께 넣으면 블록 정보도 갱신합니다.`}
         placeholder={`---ENTRY---\n날짜: 2026-09-18\n과목: ${subject.name}\n블록: ${block.name}\n\n내용:\n…\n---END---\n\n---ENTRY---\n…\n---END---`}
         parse={readEntries}
         applyLabel="기록 반영"
         onApply={applyEntries}
-        renderPreview={(planned) => <EntriesPlanPreview planned={planned} />}
+        renderPreview={(planned) => (
+          <>
+            <EntriesPlanPreview planned={planned} />
+            {planned.plan.blocks.map((item) => (
+              <BlockInfoDiff key={item.id} block={state.blocks[item.id]} patch={item.patch} />
+            ))}
+          </>
+        )}
       />
 
       {/* 삭제 확인 */}

@@ -2035,3 +2035,23 @@
   max-width: none !important;
   max-height: 76dvh;
 }
+
+/* ═══ 블록 정보 변경 요약 (기록 가져오기에 ---BLOCK--- 가 함께 올 때) ═══ */
+
+.blockdiff {
+  display: grid;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+
+.blockdiff__same {
+  color: var(--text-faint);
+}
+
+.editor__blockinfo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
