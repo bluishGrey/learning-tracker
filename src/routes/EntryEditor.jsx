@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useStore, useActions } from '../state/StoreContext.jsx';
 import { selectBlocks, selectTagSuggestions } from '../state/selectors.js';
@@ -80,6 +80,7 @@ export default function EntryEditor() {
   const [newSubjectName, setNewSubjectName] = useState('');
   const [preview, setPreview] = useState({ diagram: false, svg: false });
   const [importing, setImporting] = useState(false);
+  const formRef = useRef(null);
 
   if (isEdit && !existing) return <NotFound />;
 
@@ -183,6 +184,31 @@ export default function EntryEditor() {
 
   const cancel = () => navigate(returnTo ?? -1);
 
+  /**
+   * 기록 저장은 **저장 버튼 또는 Ctrl(⌘)+Enter** 로만 한다.
+   *
+   * 한 줄 입력칸(날짜·제목·진행률·태그)에서 Enter 를 치면 브라우저가 폼을
+   * '암시적 제출'한다. 태그를 넣으려다 기록이 저장되는 사고가 그것이었다.
+   * 여기서 한 번에 막아 두면 입력칸이 늘어나도 같은 규칙을 따른다.
+   *
+   * Ctrl+Enter 는 한 틱 뒤에 제출한다. 태그 입력칸이 같은 키로 쓰던 태그를
+   * 먼저 확정하는데, 그 state 가 반영된 뒤에 저장해야 태그가 빠지지 않는다.
+   */
+  const handleFormKeyDown = (event) => {
+    if (event.key !== 'Enter') return;
+
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      setTimeout(() => formRef.current?.requestSubmit(), 0);
+      return;
+    }
+
+    const el = event.target;
+    if (el.tagName === 'INPUT' && !['button', 'submit', 'reset', 'checkbox', 'radio'].includes(el.type)) {
+      event.preventDefault();
+    }
+  };
+
   return (
     <main className="page">
       <Breadcrumb
@@ -199,7 +225,7 @@ export default function EntryEditor() {
         </p>
       </div>
 
-      <form onSubmit={submit}>
+      <form ref={formRef} onSubmit={submit} onKeyDown={handleFormKeyDown}>
         <div className="field">
           <label className="field__label" htmlFor="entry-date">
             날짜
@@ -454,7 +480,12 @@ export default function EntryEditor() {
           <button type="button" className="btn" onClick={cancel}>
             취소
           </button>
-          <button type="submit" className="btn btn--primary" disabled={!canSave}>
+          <button
+            type="submit"
+            className="btn btn--primary"
+            disabled={!canSave}
+            title="저장 (Ctrl+Enter)"
+          >
             {isEdit ? '저장' : '기록 추가'}
           </button>
         </div>
