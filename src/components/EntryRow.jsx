@@ -9,9 +9,12 @@ import { formatMonthDay } from '../lib/date.js';
  * 진행률은 배지로 함께 찍는다. 추이 그래프와 같은 값을 숫자로도 읽을 수 있어야
  * 그림을 보지 못하는 상황에서도 정보가 남는다.
  *
- * @param {{ entry, to, subject?, block?, showDate?: boolean }} props
+ * progressDropped 는 블록 화면이 넘겨준다 — 직전 기록보다 진행률이 낮아졌다는 작은 표시.
+ * 오류가 아니라 '한번 확인해 보라'는 뜻이라 경고색 글자 하나로만 남긴다.
+ *
+ * @param {{ entry, to, subject?, block?, showDate?: boolean, progressDropped?: boolean }} props
  */
-export default function EntryRow({ entry, to, subject, block, showDate = false }) {
+export default function EntryRow({ entry, to, subject, block, showDate = false, progressDropped = false }) {
   return (
     <Link to={to} className="card entryrow">
       <div className="entryrow__head">
@@ -30,6 +33,16 @@ export default function EntryRow({ entry, to, subject, block, showDate = false }
         {entry.progressPercent != null && (
           <span className="entryrow__badge entryrow__badge--progress">
             {entry.progressPercent}%
+          </span>
+        )}
+        {progressDropped && (
+          <span
+            className="entryrow__drop"
+            title="진행률이 이전보다 낮음"
+            aria-label="진행률이 이전보다 낮음"
+            role="img"
+          >
+            ▼
           </span>
         )}
         {entry.diagramCode && <span className="entryrow__badge">다이어그램</span>}

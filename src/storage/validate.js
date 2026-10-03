@@ -225,6 +225,10 @@ export function validateStateShape(data) {
       errors.push({ path: at('svgCode'), message: 'SVG 코드가 문자열이 아닙니다.' });
     }
     warnings.push(...checkPercent(b.progressPercent, at('progressPercent'), '블록 진행률'));
+    // 필드 추가로 생긴 선택 항목. 형식이 이상해도 '모름'으로 보면 되므로 경고만 한다.
+    if (b.infoUpdatedAt != null && (typeof b.infoUpdatedAt !== 'string' || Number.isNaN(Date.parse(b.infoUpdatedAt)))) {
+      warnings.push({ path: at('infoUpdatedAt'), message: '블록 정보 갱신 시각을 읽을 수 없어 "모름"으로 처리합니다.' });
+    }
   });
 
   // ─ Entry ─

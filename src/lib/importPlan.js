@@ -17,6 +17,7 @@
  *
  *   과목 — 이름. 없으면 만들지 않고 오류를 낸다 (가져오기의 기준점이다).
  *   블록 — 그 과목 안에서의 이름. 없으면 새로 만든다.
+ *   (이름은 lib/nameMatch.js 규칙 — 정확히 같은 이름이 먼저, 없으면 공백·대소문자 무시)
  *   기록 — 같은 블록 안에서 '날짜 + 제목'. 없으면 새로 만든다.
  *
  * 과목만 자동 생성하지 않는 이유는 오타 사고 때문이다. 'Algebra' 를 'algebra' 로
@@ -26,6 +27,9 @@
  */
 
 import { newId } from './id.js';
+import { nameKey, findByName } from './nameMatch.js';
+import { checkCompanionBlock } from './structuredText.js';
+import { blockSyncWarnings } from './blockSync.js';
 
 /**
  * 블록 하나에 기록들을 몰아넣는 계획 — 블록 상세의 '기록 전체 가져오기'.
@@ -41,13 +45,23 @@ export function planEntriesImport(state, docs, { subjectId, blockId }) {
   }
 
   const errors = [];
-  const wrongKind = docs.filter((d) => d.kind !== 'entry');
+  // 그 블록 자신의 ---BLOCK--- 문서 하나는 함께 받는다 (블록 정보 동기화).
+  // 과목 정보나 다른 블록의 정보는 이 화면의 일이 아니다.
+  const wrongKind = docs.filter((d) => d.kind !== 'entry' && d.kind !== 'block');
   if (wrongKind.length > 0) {
     errors.push(
-      `기록(---ENTRY---) 형식만 가져올 수 있습니다. ${wrongKind.length}개의 다른 형식이 섞여 있습니다. (${wrongKind
-        .map((d) => `${d.line}번째 줄 ${d.kind === 'subject' ? '과목' : '블록'} 정보`)
+      `기록(---ENTRY---)과 이 블록의 블록 정보(---BLOCK---)만 가져올 수 있습니다. 과목 정보가 섞여 있습니다. (${wrongKind
+        .map((d) => `${d.line}번째 줄`)
         .join(', ')})`
     );
+  }
+  const blockDocs = docs.filter((d) => d.kind === 'block');
+  for (const doc of blockDocs) {
+    if (nameKey(doc.value.subjectName) !== nameKey(subject.name) || nameKey(doc.value.blockName) !== nameKey(block.name)) {
+      errors.push(
+        `${doc.line}번째 줄의 블록 정보는 '${doc.value.subjectName} / ${doc.value.blockName}' 의 것입니다. 지금 보고 있는 '${subject.name} / ${block.name}' 에는 반영할 수 없습니다.`
+      );
+    }
   }
 
   const entryDocs = docs.filter((d) => d.kind === 'entry');
@@ -58,7 +72,7 @@ export function planEntriesImport(state, docs, { subjectId, blockId }) {
   for (const doc of entryDocs) {
     const wantSubject = String(doc.value.subjectName ?? '').trim();
     const wantBlock = String(doc.value.blockName ?? '').trim();
-    if (wantSubject !== String(subject.name).trim() || wantBlock !== String(block.name).trim()) {
+    if (nameKey(wantSubject) !== nameKey(subject.name) || nameKey(wantBlock) !== nameKey(block.name)) {
       errors.push(
         `${doc.line}번째 줄의 기록은 '${wantSubject} / ${wantBlock}' 소속입니다. 지금 보고 있는 '${subject.name} / ${block.name}' 에는 넣을 수 없습니다.`
       );
@@ -67,8 +81,25 @@ export function planEntriesImport(state, docs, { subjectId, blockId }) {
 
   if (errors.length > 0) return fail(errors);
 
+  const companion = checkCompanionBlock(blockDocs, entryDocs);
+  if (!companion.ok) return fail(companion.errors);
+
+  const blocks = companion.block
+    ? [{ id: blockId, name: block.name, patch: blockPatchOf(companion.block), isNew: false, infoFromDoc: true }]
+    : [];
+
   const entries = planEntries(state, entryDocs, () => blockId);
-  return done({ subjectId, subjectPatch: null, blocks: [], entries });
+  return done({ subjectId, subjectPatch: null, blocks, entries });
+}
+
+/** ---BLOCK--- 문서 값 → 블록에 덮어쓸 정보 (블록 정보 가져오기와 같은 네 항목) */
+export function blockPatchOf(value) {
+  return {
+    description: value.description,
+    progressPercent: value.progressPercent,
+    diagramCode: value.diagramCode,
+    svgCode: value.svgCode,
+  };
 }
 
 /**
@@ -82,12 +113,12 @@ export function planSubjectImport(state, docs, { subjectId }) {
   const subject = state.subjects[subjectId];
   if (!subject) return fail(['가져올 대상 과목을 찾을 수 없습니다.']);
 
-  const subjectName = String(subject.name).trim();
   const errors = [];
+  const warnings = [];
 
   for (const doc of docs) {
     const want = String(doc.value.subjectName ?? '').trim();
-    if (want !== subjectName) {
+    if (nameKey(want) !== nameKey(subject.name)) {
       errors.push(
         `${doc.line}번째 줄의 문서는 '${want}' 과목의 것입니다. 지금 보고 있는 '${subject.name}' 에는 넣을 수 없습니다.`
       );
@@ -109,16 +140,35 @@ export function planSubjectImport(state, docs, { subjectId }) {
     : null;
 
   // ─ 블록: 이름으로 맞춰 보고, 없으면 새로 만든다 ─
-  const existingBlocks = new Map();
-  for (const b of Object.values(state.blocks)) {
-    if (b.subjectId !== subjectId) continue;
-    const key = String(b.name ?? '').trim();
-    if (!existingBlocks.has(key)) existingBlocks.set(key, b);
-  }
+  const existingList = Object.values(state.blocks).filter((b) => b.subjectId === subjectId);
 
-  /** 이름 → blockId. 이번에 새로 만들 블록까지 포함해야 기록이 자리를 찾는다. */
-  const blockIdByName = new Map([...existingBlocks].map(([name, b]) => [name, b.id]));
+  /** 정규화 이름 → 이번에 새로 만들 블록 id. 같은 텍스트 안에서 이름이 조금 달라도 하나로 모인다. */
+  const newIdByKey = new Map();
   const blocks = [];
+
+  /**
+   * 이름 → { id, isNew } | null(모호). 기존 블록이 먼저, 그다음 이번에 새로 만들 블록.
+   * 정규화로 맞춘 경우는 경고로 남겨 미리보기에서 보이게 한다.
+   */
+  const lookup = (name, line) => {
+    const found = findByName(existingList, name);
+    if (found.match) {
+      if (found.loose) {
+        const note = `블록 '${name}' 을(를) 기존 블록 "${found.match.name}" 으로 맞춰 읽었습니다.`;
+        if (!warnings.includes(note)) warnings.push(note);
+      }
+      return { id: found.match.id, isNew: false, existing: found.match };
+    }
+    if (found.ambiguous.length > 1) {
+      errors.push(
+        `${line}번째 줄: '${name}' 와 같은 이름(공백·대소문자 무시)의 블록이 ${found.ambiguous.length}개 있어 어느 쪽인지 알 수 없습니다. (${found.ambiguous.map((b) => `"${b.name}"`).join(', ')})`
+      );
+      return null;
+    }
+    const key = nameKey(name);
+    if (newIdByKey.has(key)) return { id: newIdByKey.get(key), isNew: false, existing: null };
+    return undefined; // 아직 없음
+  };
 
   for (const doc of docs.filter((d) => d.kind === 'block')) {
     const name = String(doc.value.blockName ?? '').trim();
@@ -126,23 +176,17 @@ export function planSubjectImport(state, docs, { subjectId }) {
       errors.push(`${doc.line}번째 줄: 블록 이름이 비어 있습니다.`);
       continue;
     }
-    const patch = {
-      description: doc.value.description,
-      progressPercent: doc.value.progressPercent,
-      diagramCode: doc.value.diagramCode,
-      svgCode: doc.value.svgCode,
-    };
+    const patch = blockPatchOf(doc.value);
 
-    const existing = existingBlocks.get(name);
-    if (existing) {
-      blocks.push({ id: existing.id, name, patch, isNew: false });
-    } else if (blockIdByName.has(name)) {
-      // 같은 텍스트 안에 같은 블록이 두 번 — 뒤쪽 값으로 덮는다
-      blocks.push({ id: blockIdByName.get(name), name, patch, isNew: false });
+    const hit = lookup(name, doc.line);
+    if (hit === null) continue;
+    if (hit) {
+      // 기존 블록 갱신, 또는 같은 텍스트 안에 같은 블록이 두 번 — 뒤쪽 값으로 덮는다
+      blocks.push({ id: hit.id, name: hit.existing?.name ?? name, patch, isNew: false, infoFromDoc: true });
     } else {
       const id = newId();
-      blockIdByName.set(name, id);
-      blocks.push({ id, name, patch, isNew: true });
+      newIdByKey.set(nameKey(name), id);
+      blocks.push({ id, name, patch, isNew: true, infoFromDoc: true });
     }
   }
 
@@ -161,40 +205,45 @@ export function planSubjectImport(state, docs, { subjectId }) {
 
   if (listedNames) {
     for (const name of listedNames) {
-      if (existingBlocks.has(name)) {
-        skipped.push(name);
-        continue;
+      const hit = lookup(name, subjectDocs[0].line);
+      if (hit === null) continue;
+      if (hit) {
+        if (hit.existing) skipped.push(name);
+        continue; // 기존 블록이거나 이번 텍스트의 BLOCK 문서가 이미 맡았다
       }
-      if (blockIdByName.has(name)) continue; // 이번 텍스트의 BLOCK 문서가 이미 맡았다
 
       const id = newId();
-      blockIdByName.set(name, id);
+      newIdByKey.set(nameKey(name), id);
       blocks.push({
         id,
         name,
         patch: { description: '', progressPercent: null, diagramCode: '', svgCode: '' },
         isNew: true,
+        infoFromDoc: false,
       });
     }
   }
 
   // ─ 기록: 이름으로 소속 블록을 찾는다 (문서 순서가 아니라 적힌 이름 기준) ─
   const entryDocs = docs.filter((d) => d.kind === 'entry');
+  const entryBlockId = new Map();
   for (const doc of entryDocs) {
     const name = String(doc.value.blockName ?? '').trim();
-    if (!blockIdByName.has(name)) {
+    const hit = lookup(name, doc.line);
+    if (hit === null) continue;
+    if (!hit) {
       errors.push(
         `${doc.line}번째 줄의 기록이 가리키는 블록 '${name}' 을 찾을 수 없습니다. 그 블록의 ---BLOCK--- 문서를 함께 붙여넣거나, 먼저 블록을 만들어 주세요.`
       );
+      continue;
     }
+    entryBlockId.set(doc, hit.id);
   }
   if (errors.length > 0) return fail(errors);
 
-  const entries = planEntries(state, entryDocs, (doc) =>
-    blockIdByName.get(String(doc.value.blockName ?? '').trim())
-  );
+  const entries = planEntries(state, entryDocs, (doc) => entryBlockId.get(doc));
 
-  return done({ subjectId, subjectPatch, blocks, entries }, { skipped });
+  return done({ subjectId, subjectPatch, blocks, entries }, { skipped }, warnings);
 }
 
 // ─── 내부 ──────────────────────────────────────────────────
@@ -254,11 +303,11 @@ function fail(errors) {
   return { ok: false, errors, warnings: [], plan: null, summary: null };
 }
 
-function done(plan, extra = {}) {
+function done(plan, extra = {}, warnings = []) {
   return {
     ok: true,
     errors: [],
-    warnings: [],
+    warnings,
     plan,
     summary: {
       subjectUpdated: plan.subjectPatch !== null,
@@ -285,4 +334,142 @@ export function describePlan(summary) {
     rows.push(`이미 있어 건너뜀 ${summary.skipped.length}개 (${summary.skipped.join(', ')})`);
   }
   return rows.length > 0 ? rows.join(' · ') : '바뀌는 것이 없습니다';
+}
+
+// ─── 오늘 기록 붙여넣기 ─────────────────────────────────────
+
+/**
+ * '오늘 기록 붙여넣기' — 어느 화면에도 매이지 않은 일괄 가져오기.
+ *
+ * 평소 흐름은 공부하던 claude.ai 채팅에서 "오늘 하루치 기록 남겨줘"로 받은 텍스트를
+ * 통째로 붙여넣는 것 하나다. 그 텍스트에는 ENTRY 가 하나일 수도, 블록을 넘나들어 여럿일
+ * 수도 있고, 블록마다 BLOCK 이 따라온다. 그래서 과목 화면·블록 화면처럼 한 단위에 매인
+ * 가져오기로는 받을 수 없었다 (그게 병목이었다).
+ *
+ * 규칙은 과목 전체 가져오기(planSubjectImport)를 과목별로 돌린 것과 같다.
+ *   - 과목은 이름(공백·대소문자 무시)으로 찾고, 없으면 **만들지 않고 멈춘다.**
+ *   - 블록은 그 과목 안에서 찾고, 없으면 새로 만든다 (미리보기에 '새로 생성됨').
+ *   - 기록은 같은 블록 안에서 '날짜 + 제목'이 같으면 갱신 — 같은 텍스트를 두 번 붙여넣어도 중복되지 않는다.
+ *   - 과목 정보(---SUBJECT---)는 받지 않는다. 과목 구성은 과목 화면의 일이다.
+ *
+ * @returns {{ ok, errors, warnings, plans: object[]|null, summary: object|null, items: object[] }}
+ *   items — 미리보기용: 문서별 { kind, subjectName, blockName, isNewBlock, isNewEntry, data }
+ */
+export function planDailyImport(state, docs, today) {
+  const errors = [];
+  const warnings = [];
+
+  const subjectDocs = docs.filter((d) => d.kind === 'subject');
+  if (subjectDocs.length > 0) {
+    errors.push(
+      `과목 정보(---SUBJECT---)는 여기서 받지 않습니다 (${subjectDocs.map((d) => `${d.line}번째 줄`).join(', ')}). 과목 화면의 '과목 정보 가져오기'를 이용하세요.`
+    );
+  }
+
+  // ─ 과목별로 나누기 ─
+  const subjects = Object.values(state.subjects);
+  const groups = new Map(); // subjectId → docs[]
+  for (const doc of docs) {
+    if (doc.kind === 'subject') continue;
+    const want = String(doc.value.subjectName ?? '').trim();
+    const found = findByName(subjects, want);
+    if (!found.match) {
+      errors.push(
+        found.ambiguous.length > 1
+          ? `${doc.line}번째 줄: '${want}' 와 같은 이름(공백·대소문자 무시)의 과목이 ${found.ambiguous.length}개 있어 어느 쪽인지 알 수 없습니다.`
+          : `${doc.line}번째 줄: '${want}' 라는 과목이 없습니다. 과목은 자동으로 만들지 않습니다 — 과목 이름을 확인하거나 먼저 과목을 만들어 주세요.`
+      );
+      continue;
+    }
+    if (found.loose) {
+      const note = `과목 '${want}' 을(를) 기존 과목 "${found.match.name}" 으로 맞춰 읽었습니다.`;
+      if (!warnings.includes(note)) warnings.push(note);
+    }
+    if (!groups.has(found.match.id)) groups.set(found.match.id, []);
+    // planSubjectImport 는 문서의 과목 이름을 다시 확인하므로 실제 이름으로 맞춰 넘긴다
+    groups.get(found.match.id).push({ ...doc, value: { ...doc.value, subjectName: found.match.name } });
+  }
+  if (errors.length > 0) return dailyFail(errors);
+
+  if (groups.size === 0) return dailyFail(['가져올 기록이나 블록 정보가 없습니다.']);
+
+  const plans = [];
+  const items = [];
+  for (const [subjectId, groupDocs] of groups) {
+    const planned = planSubjectImport(state, groupDocs, { subjectId });
+    if (!planned.ok) {
+      errors.push(...planned.errors);
+      continue;
+    }
+    warnings.push(...planned.warnings);
+    plans.push({ plan: planned.plan, summary: planned.summary });
+
+    const subject = state.subjects[subjectId];
+    const blockName = (id) =>
+      state.blocks[id]?.name ?? planned.plan.blocks.find((b) => b.id === id)?.name ?? '?';
+    const isNewBlock = (id) => !state.blocks[id];
+
+    for (const b of planned.plan.blocks) {
+      items.push({ kind: 'block', subject, blockId: b.id, blockName: b.name, isNewBlock: b.isNew, patch: b.patch });
+    }
+    planned.plan.entries.forEach((e) => {
+      items.push({
+        kind: 'entry',
+        subject,
+        blockId: e.blockId,
+        blockName: blockName(e.blockId),
+        isNewBlock: isNewBlock(e.blockId),
+        isNewEntry: e.isNew,
+        data: e.data,
+      });
+    });
+
+    // ─ 블록 정보 동기화 규칙 검사 (블록마다) ─
+    const byBlock = new Map(); // 정규화 이름 → { entries: [], block: null, name }
+    const keyOf = (name) => nameKey(name);
+    for (const doc of groupDocs) {
+      const k = keyOf(doc.value.blockName);
+      if (!byBlock.has(k)) byBlock.set(k, { entries: [], block: null, name: doc.value.blockName });
+      if (doc.kind === 'entry') byBlock.get(k).entries.push(doc.value);
+      else byBlock.get(k).block = doc.value; // 같은 블록의 BLOCK 이 둘이면 뒤쪽이 반영된다
+    }
+    const existing = Object.values(state.blocks).filter((b) => b.subjectId === subjectId);
+    for (const group of byBlock.values()) {
+      if (group.entries.length === 0) continue; // BLOCK 만 온 블록은 비교할 기록이 없다
+      const current = findByName(existing, group.name).match;
+      for (const w of blockSyncWarnings({ entries: group.entries, block: group.block, current })) {
+        warnings.push(`[${subject.name} / ${current?.name ?? group.name}] ${w}`);
+      }
+    }
+  }
+  if (errors.length > 0) return dailyFail(errors);
+
+  // ─ 날짜: claude.ai 는 오늘 날짜를 모를 때가 있다 ─
+  if (today) {
+    const odd = [...new Set(items.filter((i) => i.kind === 'entry' && i.data.date !== today).map((i) => i.data.date))];
+    if (odd.length > 0) {
+      warnings.push(`기록 날짜가 오늘(${today})이 아닙니다: ${odd.join(', ')}. 맞는 날짜인지 확인하세요.`);
+    }
+  }
+
+  const sum = (key) => plans.reduce((n, p) => n + p.summary[key], 0);
+  return {
+    ok: true,
+    errors: [],
+    warnings,
+    plans: plans.map((p) => p.plan),
+    items,
+    summary: {
+      subjectUpdated: false,
+      blocksAdded: sum('blocksAdded'),
+      blocksUpdated: sum('blocksUpdated'),
+      entriesAdded: sum('entriesAdded'),
+      entriesUpdated: sum('entriesUpdated'),
+      skipped: [],
+    },
+  };
+}
+
+function dailyFail(errors) {
+  return { ok: false, errors, warnings: [], plans: null, items: [], summary: null };
 }

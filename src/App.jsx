@@ -5,6 +5,7 @@ import AppHeader from './components/AppHeader.jsx';
 import NoticeBar from './components/NoticeBar.jsx';
 import Sidebar from './components/Sidebar.jsx';
 import ShortcutHelp from './components/ShortcutHelp.jsx';
+import { DailyImportProvider } from './components/DailyImport.jsx';
 
 import Home from './routes/Home.jsx';
 import CalendarView from './routes/CalendarView.jsx';
@@ -29,7 +30,10 @@ const NARROW_QUERY = '(max-width: 899px)';
 export default function App() {
   return (
     <HashRouter>
-      <Shell />
+      {/* '오늘 기록 붙여넣기' 창은 어느 화면에서든 열 수 있도록 껍데기 바깥에 하나만 둔다 */}
+      <DailyImportProvider>
+        <Shell />
+      </DailyImportProvider>
     </HashRouter>
   );
 }

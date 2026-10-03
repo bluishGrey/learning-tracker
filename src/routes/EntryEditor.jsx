@@ -1,16 +1,19 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useStore, useActions } from '../state/StoreContext.jsx';
-import { selectBlocks, selectTagSuggestions } from '../state/selectors.js';
+import { selectBlocks, selectBlockEntries, selectTagSuggestions } from '../state/selectors.js';
 import Breadcrumb from '../components/Breadcrumb.jsx';
 import TagInput from '../components/TagInput.jsx';
 import DiagramEmbed from '../components/DiagramEmbed.jsx';
 import SvgEmbed from '../components/SvgEmbed.jsx';
 import PasteImportSheet from '../components/PasteImportSheet.jsx';
+import BlockInfoDiff, { changedBlockFields } from '../components/BlockInfoDiff.jsx';
 import NotFound from './NotFound.jsx';
 import { todayKey, isValidDateKey } from '../lib/date.js';
-import { deriveTitleFromContent } from '../lib/entryTitle.js';
+import { deriveTitleFromContent, entryTitle } from '../lib/entryTitle.js';
 import { parseEntryText, resolveTarget } from '../lib/structuredText.js';
+import { blockPatchOf } from '../lib/importPlan.js';
+import { blockSyncWarnings } from '../lib/blockSync.js';
 
 /**
  * 기록 작성 / 수정.
@@ -80,6 +83,13 @@ export default function EntryEditor() {
   const [newSubjectName, setNewSubjectName] = useState('');
   const [preview, setPreview] = useState({ diagram: false, svg: false });
   const [importing, setImporting] = useState(false);
+  /**
+   * 가져온 텍스트에 함께 들어 있던 블록 정보. 폼과 마찬가지로 **기록을 저장할 때** 반영한다
+   * — 가져오기는 채우기만 하고 저장은 사용자가 누른다는 이 화면의 규칙을 그대로 따른다.
+   * @type {[{ blockId: string, patch: object }|null, Function]}
+   */
+  const [pendingBlockInfo, setPendingBlockInfo] = useState(null);
+  const formRef = useRef(null);
 
   if (isEdit && !existing) return <NotFound />;
 
@@ -128,9 +138,37 @@ export default function EntryEditor() {
     const target = resolveTarget(state, parsed.value);
     if (!target.ok) return { ...parsed, ok: false, errors: target.errors };
 
+    // '새 기록' 화면은 저장할 때마다 기록을 새로 만든다. 같은 텍스트를 두 번 붙여넣으면
+    // 같은 기록이 둘이 된다 — 막지는 않되(일부러일 수 있다) 미리 알려 준다.
+    const dupWarnings = [];
+    if (!isEdit) {
+      const wantTitle = String(parsed.value.title ?? '').trim();
+      const dup = selectBlockEntries(index, target.blockId).find(
+        (e) => e.date === parsed.value.date && String(e.title ?? '').trim() === wantTitle
+      );
+      if (dup) {
+        dupWarnings.push(
+          `같은 블록에 날짜·제목이 같은 기록이 이미 있습니다 (${dup.date} ${entryTitle(dup)}). 저장하면 기록이 하나 더 생깁니다. 기존 기록을 고치려면 그 기록의 '수정' 화면에서 가져오세요.`
+        );
+      }
+    }
+
+    const syncWarnings = blockSyncWarnings({
+      entries: [parsed.value],
+      block: parsed.block,
+      current: state.blocks[target.blockId],
+    });
+
     return {
       ...parsed,
-      value: { ...parsed.value, subjectId: target.subjectId, blockId: target.blockId },
+      warnings: [...parsed.warnings, ...target.warnings, ...dupWarnings, ...syncWarnings],
+      value: {
+        ...parsed.value,
+        subjectId: target.subjectId,
+        blockId: target.blockId,
+        // 함께 온 ---BLOCK--- 는 기록과 같은 블록임을 파서가 이미 확인했다
+        blockInfo: parsed.block ? { blockId: target.blockId, patch: blockPatchOf(parsed.block) } : null,
+      },
     };
   };
 
@@ -147,9 +185,12 @@ export default function EntryEditor() {
       svgCode: value.svgCode,
     });
     setAddingBlock(false);
+    setPendingBlockInfo(value.blockInfo);
     actions.setNotice({
       level: 'success',
-      message: '가져온 내용으로 폼을 채웠습니다. 확인한 뒤 저장을 눌러 주세요.',
+      message: value.blockInfo
+        ? '가져온 내용으로 폼을 채웠습니다. 저장하면 블록 정보도 함께 갱신됩니다.'
+        : '가져온 내용으로 폼을 채웠습니다. 확인한 뒤 저장을 눌러 주세요.',
     });
   };
 
@@ -170,11 +211,28 @@ export default function EntryEditor() {
       svgCode: form.svgCode.trim() || null,
     };
 
+    if (pendingBlockInfo && state.blocks[pendingBlockInfo.blockId]) {
+      actions.updateBlock(pendingBlockInfo.blockId, pendingBlockInfo.patch, { markInfo: true });
+    }
+
     if (isEdit) {
       actions.updateEntry(entryId, payload);
-      navigate(returnTo ?? `/subjects/${form.subjectId}/${form.blockId}/e/${entryId}`, {
-        replace: true,
-      });
+
+      // 블록을 옮겼으면 과목 경로로 돌아가는 주소(/subjects/옛과목/옛블록/e/…)는 더 이상 맞지 않는다.
+      // 캘린더 경로(/day/…)는 날짜만 보므로 그대로 둔다.
+      const moved = existing.blockId !== form.blockId;
+      const backToSubjectPath = !returnTo || returnTo.startsWith('/subjects/');
+      const target =
+        moved && backToSubjectPath
+          ? `/subjects/${form.subjectId}/${form.blockId}/e/${entryId}`
+          : (returnTo ?? `/subjects/${form.subjectId}/${form.blockId}/e/${entryId}`);
+      if (moved) {
+        actions.setNotice({
+          level: 'success',
+          message: `기록을 '${state.subjects[form.subjectId]?.name} / ${state.blocks[form.blockId]?.name}' 로 옮겼습니다.`,
+        });
+      }
+      navigate(target, { replace: true });
     } else {
       const id = actions.addEntry(payload);
       navigate(`/subjects/${form.subjectId}/${form.blockId}/e/${id}`, { replace: true });
@@ -182,6 +240,31 @@ export default function EntryEditor() {
   };
 
   const cancel = () => navigate(returnTo ?? -1);
+
+  /**
+   * 기록 저장은 **저장 버튼 또는 Ctrl(⌘)+Enter** 로만 한다.
+   *
+   * 한 줄 입력칸(날짜·제목·진행률·태그)에서 Enter 를 치면 브라우저가 폼을
+   * '암시적 제출'한다. 태그를 넣으려다 기록이 저장되는 사고가 그것이었다.
+   * 여기서 한 번에 막아 두면 입력칸이 늘어나도 같은 규칙을 따른다.
+   *
+   * Ctrl+Enter 는 한 틱 뒤에 제출한다. 태그 입력칸이 같은 키로 쓰던 태그를
+   * 먼저 확정하는데, 그 state 가 반영된 뒤에 저장해야 태그가 빠지지 않는다.
+   */
+  const handleFormKeyDown = (event) => {
+    if (event.key !== 'Enter') return;
+
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      setTimeout(() => formRef.current?.requestSubmit(), 0);
+      return;
+    }
+
+    const el = event.target;
+    if (el.tagName === 'INPUT' && !['button', 'submit', 'reset', 'checkbox', 'radio'].includes(el.type)) {
+      event.preventDefault();
+    }
+  };
 
   return (
     <main className="page">
@@ -199,7 +282,26 @@ export default function EntryEditor() {
         </p>
       </div>
 
-      <form onSubmit={submit}>
+      {pendingBlockInfo && state.blocks[pendingBlockInfo.blockId] && (
+        <div className="callout callout--info editor__blockinfo">
+          <strong>
+            저장하면 &apos;{state.blocks[pendingBlockInfo.blockId].name}&apos; 블록 정보도 함께 갱신됩니다.
+          </strong>{' '}
+          <span className="field__hint">
+            ({changedBlockFields(state.blocks[pendingBlockInfo.blockId], pendingBlockInfo.patch).join(' · ') ||
+              '내용 변화 없음, 갱신 시각만 기록'})
+          </span>
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            onClick={() => setPendingBlockInfo(null)}
+          >
+            블록 정보는 반영 안 함
+          </button>
+        </div>
+      )}
+
+      <form ref={formRef} onSubmit={submit} onKeyDown={handleFormKeyDown}>
         <div className="field">
           <label className="field__label" htmlFor="entry-date">
             날짜
@@ -308,6 +410,16 @@ export default function EntryEditor() {
                     추가
                   </button>
                 </div>
+              )}
+
+              {isEdit && existing.blockId !== form.blockId && form.blockId && (
+                <p className="field__hint editor__movehint">
+                  저장하면 이 기록이 &apos;{state.blocks[existing.blockId]?.name}&apos; 에서 &apos;
+                  {state.blocks[form.blockId]?.name}&apos; 블록으로 옮겨집니다.
+                </p>
+              )}
+              {isEdit && existing.blockId === form.blockId && (
+                <p className="field__hint">과목·블록을 바꾸면 이 기록을 다른 블록으로 옮길 수 있습니다.</p>
               )}
 
               <div className="row">
@@ -454,7 +566,12 @@ export default function EntryEditor() {
           <button type="button" className="btn" onClick={cancel}>
             취소
           </button>
-          <button type="submit" className="btn btn--primary" disabled={!canSave}>
+          <button
+            type="submit"
+            className="btn btn--primary"
+            disabled={!canSave}
+            title="저장 (Ctrl+Enter)"
+          >
             {isEdit ? '저장' : '기록 추가'}
           </button>
         </div>
@@ -472,12 +589,19 @@ export default function EntryEditor() {
         open={importing}
         onClose={() => setImporting(false)}
         title="기록 가져오기"
-        hint="claude.ai 가 만들어 준 ---ENTRY--- 형식 텍스트를 그대로 붙여넣으세요. 폼의 각 칸을 채우기만 하고, 저장은 직접 누르셔야 합니다."
+        hint="claude.ai 가 만들어 준 ---ENTRY--- 형식 텍스트를 그대로 붙여넣으세요. 그 블록의 ---BLOCK--- (블록 정보) 문서를 함께 넣으면 블록 정보도 갱신합니다. 폼의 각 칸을 채우기만 하고, 저장은 직접 누르셔야 합니다."
         placeholder={'---ENTRY---\n날짜: 2026-09-18\n과목: 수학\n블록: 3주차\n\n내용:\n…\n---END---'}
         parse={readEntry}
         applyLabel="폼에 채우기"
         onApply={applyEntry}
-        renderPreview={(value) => <EntryPreview value={value} state={state} />}
+        renderPreview={(value) => (
+          <>
+            <EntryPreview value={value} state={state} />
+            {value.blockInfo && (
+              <BlockInfoDiff block={state.blocks[value.blockInfo.blockId]} patch={value.blockInfo.patch} />
+            )}
+          </>
+        )}
       />
     </main>
   );

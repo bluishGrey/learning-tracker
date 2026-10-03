@@ -307,19 +307,20 @@
 }
 
 .calendar__day {
-  aspect-ratio: 1;
+  position: relative;
+  min-width: 0;
+  min-height: 72px;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   justify-content: flex-start;
-  gap: 3px;
-  padding: 5px 2px;
+  gap: 2px;
+  padding: 4px 3px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: var(--surface-2);
   color: var(--text-dim);
   font-size: 0.8rem;
-  min-height: 44px;
 }
 
 .calendar__day--active {
@@ -338,22 +339,93 @@
   border-color: var(--border-strong);
 }
 
-.calendar__num {
-  line-height: 1.1;
+/* 칸 전체를 덮는 '그날 보기' 링크 — 라벨 링크들은 이 위에 올라간다 */
+.calendar__daylink {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
 }
 
-.calendar__dots {
+.calendar__daylink:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.calendar__num {
+  position: relative;
+  line-height: 1.1;
+  text-align: center;
+  pointer-events: none;
+}
+
+.calendar__labels {
+  position: relative;
+  z-index: 1;
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
+  flex-direction: column;
   gap: 2px;
+  min-width: 0;
+}
+
+.calendar__label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 1px 3px;
+  border-left: 2px solid var(--label-color);
+  border-radius: 3px;
+  background: var(--label-bg);
+  color: var(--text);
+  font-size: 0.64rem;
+  font-weight: 500;
+  line-height: 1.35;
+  text-decoration: none;
+}
+
+.calendar__label:hover {
+  filter: brightness(1.1);
+  text-decoration: underline;
+}
+
+.calendar__label .subject-dot {
+  flex: none;
+}
+
+.calendar__labeltext {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .calendar__more {
-  font-size: 0.6rem;
+  align-self: flex-start;
+  padding: 0 3px;
+  font-size: 0.62rem;
   color: var(--text-faint);
-  line-height: 1;
+  line-height: 1.3;
+  text-decoration: none;
+}
+
+.calendar__more:hover {
+  color: var(--accent);
+}
+
+/* 아주 좁은 화면 — 글자가 몇 자라도 더 들어가도록 여백·옆선을 걷고 글자를 줄인다 (점은 남긴다) */
+@media (max-width: 480px) {
+  .calendar__day {
+    min-height: 60px;
+    padding: 3px 1px;
+  }
+
+  .calendar__label {
+    gap: 2px;
+    padding: 0 2px;
+    border-left: none;
+    font-size: 0.58rem;
+  }
 }
 
 .legend {
@@ -1786,6 +1858,14 @@
   margin-top: var(--sp-2);
 }
 
+/* 직전보다 진행률이 낮아진 기록 — 오류가 아니라 '확인해 보라'는 작은 표시 */
+.entryrow__drop {
+  color: var(--warn);
+  font-size: 0.66rem;
+  line-height: 1;
+  cursor: help;
+}
+
 /* ═══ 주고받기 버튼 묶음 ═══════════════════════════════════ */
 
 /*
@@ -2026,4 +2106,258 @@
   height: auto;
   max-width: none !important;
   max-height: 76dvh;
+}
+
+/* ═══ 블록 정보 변경 요약 (기록 가져오기에 ---BLOCK--- 가 함께 올 때) ═══ */
+
+.blockdiff {
+  display: grid;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+
+.blockdiff__same {
+  color: var(--text-faint);
+}
+
+.editor__blockinfo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+
+/* ═══ 블록 정보 낡음 표시 ═══════════════════════════════════ */
+
+.stalebadge {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: var(--sp-1) 0 var(--sp-2);
+  padding: 2px var(--sp-2);
+  border: 1px solid var(--warn);
+  border-radius: 999px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 0.74rem;
+  line-height: 1.5;
+  cursor: pointer;
+  text-align: left;
+}
+
+.stalebadge:hover {
+  filter: brightness(1.08);
+}
+
+.stalebadge__why {
+  color: var(--text-dim);
+}
+
+.stalebadge--icon {
+  flex: none;
+  margin: 0;
+  padding: 0;
+  width: 20px;
+  height: 20px;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 0.7rem;
+}
+
+.editor__movehint {
+  color: var(--warn);
+}
+
+/* ═══ 헷갈림 행 검색 결과 ═══════════════════════════════════ */
+
+.hl {
+  background: var(--warn-soft);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+  box-shadow: 0 0 0 1px var(--warn);
+}
+
+.searchresults__answer {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.76rem;
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+
+/* 기록 화면: 검색·복습에서 온 행을 잠깐 강조 */
+.confusion-flash > td {
+  animation: confusion-flash 2.4s ease-out;
+}
+
+@keyframes confusion-flash {
+  0%,
+  35% {
+    background: var(--warn-soft);
+    box-shadow: inset 0 0 0 9999px var(--warn-soft);
+  }
+  100% {
+    background: transparent;
+    box-shadow: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confusion-flash > td {
+    animation: none;
+    background: var(--warn-soft);
+  }
+}
+
+/* ═══ 오늘의 복습 카드 ═══════════════════════════════════════ */
+
+.reviewcard {
+  margin-top: 0;
+  margin-bottom: var(--sp-4);
+}
+
+.reviewcard__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.reviewcard__item {
+  display: grid;
+  gap: 6px;
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.reviewcard__q {
+  font-weight: 650;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.reviewcard__q:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.reviewcard__a {
+  justify-self: start;
+  max-width: 100%;
+  padding: 4px var(--sp-2);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-faint);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+}
+
+.reviewcard__a--open {
+  border-style: solid;
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.reviewcard__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--text-faint);
+}
+
+.reviewcard__badge {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-2);
+}
+
+/* ═══ 오늘 기록 붙여넣기 ═══════════════════════════════════ */
+
+.home__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  justify-content: flex-end;
+}
+
+.sidebar__navbtn {
+  width: 100%;
+  border: none;
+  background: none;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.daily {
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.daily__summary {
+  margin: 0;
+  font-weight: 650;
+}
+
+.daily__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-1);
+}
+
+.daily__row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  column-gap: var(--sp-2);
+  padding: var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.daily__title {
+  min-width: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.daily__meta {
+  grid-column: 2 / 3;
+  font-size: 0.74rem;
+  color: var(--text-faint);
+}
+
+.daily__badge {
+  grid-column: 3;
+  grid-row: 1 / 3;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-2);
+  font-size: 0.72rem;
+}
+
+.daily__badge--update {
+  background: var(--surface-3);
+  color: var(--text-dim);
 }

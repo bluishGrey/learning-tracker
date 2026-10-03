@@ -4,6 +4,9 @@ import { useStore } from '../state/StoreContext.jsx';
 import { selectBlocks, selectBlockEntries, selectSearch, SEARCH_LIMIT } from '../state/selectors.js';
 import SubjectDot from './SubjectDot.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
+import StaleBadge from './StaleBadge.jsx';
+import Highlight from './Highlight.jsx';
+import { useOpenDailyImport } from './DailyImport.jsx';
 import { entryTitle } from '../lib/entryTitle.js';
 import { todayKey, monthKeyOf, formatMonthDay } from '../lib/date.js';
 
@@ -23,6 +26,7 @@ import { todayKey, monthKeyOf, formatMonthDay } from '../lib/date.js';
 export default function Sidebar({ open, onNavigate, searchRef, onOpenHelp }) {
   const { state, index } = useStore();
   const location = useLocation();
+  const openDailyImport = useOpenDailyImport();
 
   const [query, setQuery] = useState('');
   const [openSubjects, setOpenSubjects] = useState(() => new Set());
@@ -72,8 +76,18 @@ export default function Sidebar({ open, onNavigate, searchRef, onOpenHelp }) {
         >
           🗓 캘린더
         </Link>
+        <button
+          type="button"
+          className="sidebar__navlink sidebar__navbtn"
+          onClick={() => {
+            onNavigate?.();
+            openDailyImport();
+          }}
+        >
+          ⤓ 오늘 기록 붙여넣기
+        </button>
         <Link to="/new" className="sidebar__navlink" onClick={onNavigate}>
-          ✏️ 새 기록
+          ✏️ 직접 쓰기
         </Link>
       </nav>
 
@@ -231,6 +245,7 @@ function TreeSection({
                               </span>
                               <span className="tree__count">{entries.length}</span>
                             </button>
+                            <StaleBadge subject={subject} block={block} variant="icon" />
                             <Link
                               to={`/subjects/${subject.id}/${block.id}`}
                               className="tree__go"
@@ -287,7 +302,7 @@ function SearchResults({ results, onNavigate }) {
       <p className="sidebar__empty">
         &quot;{results.query}&quot; 와 맞는 것이 없습니다.
         <br />
-        과목·블록 이름, 기록의 제목·내용·태그를 찾습니다.
+        과목·블록 이름, 기록의 제목·내용·태그, 헷갈림 표의 행을 찾습니다.
       </p>
     );
   }
@@ -295,6 +310,41 @@ function SearchResults({ results, onNavigate }) {
   return (
     <div className="searchresults">
       <p className="searchresults__count">{results.total}개 찾음</p>
+
+      {/* 헷갈림 행 결과 — 맨 위. 행을 누르면 그 기록을 열고 표의 그 행으로 스크롤한다 */}
+      {results.confusions.length > 0 && (
+        <SearchGroup title="헷갈림 행" count={results.confusions.length}>
+          {results.confusions.map(({ entry, block, subject, row }) => (
+            <li key={`${entry.id}:${row.rowIndex}`}>
+              <Link
+                to={`/subjects/${subject.id}/${block.id}/e/${entry.id}?row=${row.rowIndex}`}
+                className="searchresults__row searchresults__row--confusion"
+                onClick={onNavigate}
+              >
+                <span className="searchresults__title">
+                  {/* title 은 flex 라 조각마다 간격이 생긴다 — 한 덩어리로 감싼다 */}
+                  <span>
+                    <Highlight text={row.question || '(헷갈린 것 비어 있음)'} query={results.query} />
+                  </span>
+                </span>
+                {row.answer && (
+                  <span className="searchresults__answer">
+                    → <Highlight text={row.answer} query={results.query} />
+                  </span>
+                )}
+                {row.keywords && (
+                  <span className="searchresults__snippet">
+                    # <Highlight text={row.keywords} query={results.query} />
+                  </span>
+                )}
+                <span className="searchresults__path">
+                  {formatMonthDay(entry.date)} · {subject.name} / {block.name}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </SearchGroup>
+      )}
 
       {results.subjects.length > 0 && (
         <SearchGroup title="과목" count={results.subjects.length}>

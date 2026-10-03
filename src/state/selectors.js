@@ -12,8 +12,12 @@ import {
   yearFraction,
   daysInYear,
   parseDateKey,
+  toDateKey,
+  addDays,
 } from '../lib/date.js';
 import { activityAlpha, densityAlpha, nextFreeHueIndex } from '../lib/color.js';
+import { confusionRowsOf, rowMatches } from '../lib/confusionTable.js';
+import { deriveTitleFromContent } from '../lib/entryTitle.js';
 
 /**
  * 밀도 계산 시 적용할 최소 기간.
@@ -182,6 +186,90 @@ export function selectBlockProgress(block) {
 }
 
 /**
+ * 블록 화면에 **표시할** 진행률 — 숫자를 새로 계산하지 않고 고르기만 한다.
+ *
+ *   1. 그 블록에서 날짜가 가장 늦은 기록이 가진 진행률 값 그대로.
+ *      같은 날짜면 나중에 만든(가져온) 기록. 진행률을 적지 않은 기록은 건너뛴다
+ *      — 비어 있는 것은 '모름'이지 0% 가 아니다.
+ *   2. 진행률이 적힌 기록이 하나도 없으면 블록에 저장된 값(Block.progressPercent).
+ *
+ * 평균·가중치 같은 앱 자체 계산은 넣지 않는다. 숫자의 출처는 언제나 claude.ai 다.
+ * 고르는 순서가 entriesByBlock 정렬(날짜 → 생성 시각)과 같아서, 진행률 추이 그래프의
+ * 마지막 점과 항상 같은 값이 나온다.
+ *
+ * @returns {{ hasValue: boolean, percent: number, source: 'entry'|'block'|null, entry: object|null }}
+ */
+export function selectBlockDisplayProgress(index, block) {
+  const entries = index.entriesByBlock.get(block?.id) ?? [];
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    const entry = entries[i];
+    const p = Number(entry.progressPercent);
+    if (entry.progressPercent == null || !Number.isFinite(p)) continue;
+    return { hasValue: true, percent: clampPercent(p), source: 'entry', entry };
+  }
+  const stored = selectBlockProgress(block);
+  return { ...stored, source: stored.hasValue ? 'block' : null, entry: null };
+}
+
+/**
+ * 직전 기록보다 진행률이 낮아진 기록들의 id.
+ *
+ * 오류가 아니다 — 범위를 다시 잡았거나 claude.ai 가 기준을 바꿨을 수 있다.
+ * 다만 눈치채지 못하고 지나가면 곤란하니 목록에 작은 표시만 단다.
+ * '직전'은 진행률이 적힌 바로 앞 기록이다 (빈 기록은 비교 대상이 아니다).
+ */
+export function selectProgressDrops(index, blockId) {
+  const drops = new Set();
+  let prev = null;
+  for (const entry of index.entriesByBlock.get(blockId) ?? []) {
+    const p = Number(entry.progressPercent);
+    if (entry.progressPercent == null || !Number.isFinite(p)) continue;
+    if (prev !== null && p < prev) drops.add(entry.id);
+    prev = p;
+  }
+  return drops;
+}
+
+function clampPercent(n) {
+  return Math.min(100, Math.max(0, Math.round(n)));
+}
+
+/**
+ * 블록 정보가 기록보다 낡았는가.
+ *
+ * '기록 가져오기'만 쓰다 보면 기록은 쌓이는데 블록 설명·진행률·그림은 그대로 남는다.
+ * 그걸 눈치챌 수 있게 하는 작은 표시의 근거다.
+ *
+ *   - 완료한 블록은 보지 않는다 (더 갱신할 이유가 없다)
+ *   - 기록이 하나도 없으면 비교할 것이 없으므로 낡지 않은 것으로 본다
+ *     (과목 정보의 '블록 목록'으로 미리 만들어 둔 빈 블록까지 전부 표시되면 소음이다)
+ *   - 갱신 시각이 없으면(예전 데이터) '모름' → 낡음
+ *   - 마지막 기록 날짜가 갱신 시각의 날짜보다 **늦으면** 낡음. 같은 날은 낡지 않음
+ *     (기록 날짜에는 시각이 없어서 같은 날 안의 앞뒤는 알 수 없다)
+ *
+ * @returns {{ stale: boolean, reason: 'unknown'|'older'|null, lastEntryDate: string|null, infoDate: string|null }}
+ */
+export function selectBlockStaleness(index, block) {
+  const none = { stale: false, reason: null, lastEntryDate: null, infoDate: null };
+  if (!block || block.isCompleted) return none;
+
+  const entries = index.entriesByBlock.get(block.id) ?? [];
+  if (entries.length === 0) return none;
+
+  let lastEntryDate = entries[0].date;
+  for (const e of entries) if (e.date > lastEntryDate) lastEntryDate = e.date;
+
+  const at = block.infoUpdatedAt ? new Date(block.infoUpdatedAt) : null;
+  if (!at || Number.isNaN(at.getTime())) {
+    return { stale: true, reason: 'unknown', lastEntryDate, infoDate: null };
+  }
+  const infoDate = toDateKey(at);
+  return lastEntryDate > infoDate
+    ? { stale: true, reason: 'older', lastEntryDate, infoDate }
+    : { ...none, lastEntryDate, infoDate };
+}
+
+/**
  * 블록 안의 진행률 추이 — 진행률이 적힌 기록만 날짜순으로 뽑는다.
  *
  * Block.progressPercent(대표값)와 달리 이쪽은 Entry.progressPercent 를 모은 것이다.
@@ -216,11 +304,14 @@ export const SEARCH_LIMIT = 20;
  *
  * 대소문자를 구분하지 않고 부분 일치로 찾는다. 기록은 제목과 내용을 모두 보되,
  * 내용에서 걸린 경우에는 걸린 자리 주변을 잘라 미리보기로 돌려준다.
+ *
+ * 그와 별도로 기록 본문의 '헷갈렸던 부분 정리' 표를 행 단위로 읽어(lib/confusionTable.js)
+ * 모든 열(#·헷갈린 것·정답 요약·키워드)을 찾는다. 기록 단위 결과는 예전과 똑같이 둔다.
  */
 export function selectSearch(state, index, rawQuery, limit = SEARCH_LIMIT) {
   const query = String(rawQuery ?? '').trim();
   if (query.length === 0) {
-    return { query: '', isEmpty: true, total: 0, subjects: [], blocks: [], entries: [] };
+    return { query: '', isEmpty: true, total: 0, confusions: [], subjects: [], blocks: [], entries: [] };
   }
 
   const needle = query.toLowerCase();
@@ -229,6 +320,8 @@ export function selectSearch(state, index, rawQuery, limit = SEARCH_LIMIT) {
   const subjects = [];
   const blocks = [];
   const entries = [];
+  /** '헷갈렸던 부분 정리' 표의 행 단위 결과 — 기록 단위 결과와 따로 센다 */
+  const confusions = [];
 
   for (const id of state.subjectOrder) {
     const subject = state.subjects[id];
@@ -247,6 +340,10 @@ export function selectSearch(state, index, rawQuery, limit = SEARCH_LIMIT) {
       }
 
       for (const entry of index.entriesByBlock.get(block.id) ?? []) {
+        for (const row of confusionRowsOf(entry)) {
+          if (rowMatches(row, needle)) confusions.push({ entry, block, subject, row });
+        }
+
         const inTitle = hit(entry.title);
         const inContent = hit(entry.content);
         const inTags = (entry.tags ?? []).some(hit);
@@ -263,13 +360,18 @@ export function selectSearch(state, index, rawQuery, limit = SEARCH_LIMIT) {
 
   // 기록은 최신순이 유용하다 (과목·블록은 트리 순서를 유지한다)
   entries.sort((a, b) => byDateThenCreated(b.entry, a.entry));
+  // 헷갈림 행도 최신 기록부터, 같은 기록 안에서는 표의 순서대로
+  confusions.sort(
+    (a, b) => byDateThenCreated(b.entry, a.entry) || a.row.rowIndex - b.row.rowIndex
+  );
 
-  const total = subjects.length + blocks.length + entries.length;
+  const total = confusions.length + subjects.length + blocks.length + entries.length;
   return {
     query,
     isEmpty: false,
     total,
-    truncated: total > limit * 3,
+    truncated: [confusions, subjects, blocks, entries].some((list) => list.length > limit),
+    confusions: confusions.slice(0, limit),
     subjects: subjects.slice(0, limit),
     blocks: blocks.slice(0, limit),
     entries: entries.slice(0, limit),
@@ -288,6 +390,98 @@ function snippetAround(text, needle) {
   const from = Math.max(0, at - SNIPPET_PAD);
   const to = Math.min(flat.length, at + needle.length + SNIPPET_PAD);
   return `${from > 0 ? '…' : ''}${flat.slice(from, to)}${to < flat.length ? '…' : ''}`;
+}
+
+// ─── 오늘의 복습 ───────────────────────────────────────────
+
+/** 오늘 기준 며칠 전 기록을 복습하나 (간격 반복) */
+export const REVIEW_OFFSETS = [1, 3, 7, 14];
+export const REVIEW_COUNT = 3;
+
+/**
+ * 홈의 '오늘의 복습' 카드에 띄울 헷갈림 행.
+ *
+ * 상태를 저장하지 않는다 — 날짜 계산만으로 정해진다.
+ *   1. 오늘로부터 1·3·7·14일 전 기록들의 헷갈림 행을 모아, 날짜로 만든 고정 시드로 섞어 고른다.
+ *      (같은 날에는 새로고침해도 같은 행이 나온다)
+ *   2. 모자라면 최근 기록(오늘 이전 → 오늘 → 그 밖 순, 날짜 최신순)의 행으로 채운다.
+ *   3. 행이 하나도 없으면 빈 배열 → 카드를 숨긴다.
+ *
+ * @returns {Array<{ entry, block, subject, row, daysAgo: number|null }>}
+ *   daysAgo — 간격 반복으로 뽑힌 행이면 며칠 전인지, 채우기로 뽑혔으면 null
+ */
+export function selectReviewRows(state, index, today = todayKey(), count = REVIEW_COUNT) {
+  const contextOf = (entry) => {
+    const block = state.blocks[entry.blockId];
+    const subject = block ? state.subjects[block.subjectId] : null;
+    return block && subject ? { block, subject } : null;
+  };
+  const rowsOfEntry = (entry, daysAgo) => {
+    const ctx = contextOf(entry);
+    if (!ctx) return [];
+    return confusionRowsOf(entry).map((row) => ({ entry, ...ctx, row, daysAgo }));
+  };
+
+  const pool = [];
+  for (const days of REVIEW_OFFSETS) {
+    for (const entry of index.entriesByDate.get(addDays(today, -days)) ?? []) {
+      pool.push(...rowsOfEntry(entry, days));
+    }
+  }
+
+  // 같은 질문이 여러 기록에 반복돼 있으면(다시 헷갈린 경우) 한 칸만 쓴다
+  const questionKey = (item) => item.row.question.replace(/\s+/g, ' ').trim().toLowerCase();
+  const seenQuestions = new Set();
+  const taken = new Set();
+  const picked = [];
+  const take = (item) => {
+    const key = `${item.entry.id}:${item.row.rowIndex}`;
+    const q = questionKey(item);
+    if (taken.has(key) || (q && seenQuestions.has(q))) return;
+    taken.add(key);
+    if (q) seenQuestions.add(q);
+    picked.push(item);
+  };
+
+  for (const item of seededShuffle(pool, `review:${today}`)) {
+    if (picked.length >= count) return picked;
+    take(item);
+  }
+  if (picked.length >= count) return picked;
+
+  const rank = (date) => (date < today ? 0 : date === today ? 1 : 2);
+  const recent = Object.values(state.entries).sort(
+    (a, b) => rank(a.date) - rank(b.date) || byDateThenCreated(b, a)
+  );
+  for (const entry of recent) {
+    for (const item of rowsOfEntry(entry, null)) {
+      take(item);
+      if (picked.length >= count) return picked;
+    }
+  }
+  return picked;
+}
+
+/** 문자열 시드로 고정된 셔플 (FNV-1a 해시 → mulberry32). 원본 배열은 건드리지 않는다. */
+function seededShuffle(list, seedText) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < seedText.length; i += 1) {
+    h ^= seedText.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  let t = h >>> 0;
+  const random = () => {
+    t = (t + 0x6d2b79f5) >>> 0;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+  const out = [...list];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }
 
 // ─── 캘린더 ────────────────────────────────────────────────
@@ -313,6 +507,42 @@ export function selectSubjectsOnDate(state, index, dateKey) {
   // 과목 목록 순서대로 정렬해 날짜마다 점 순서가 흔들리지 않게 한다.
   const rank = new Map(state.subjectOrder.map((id, i) => [id, i]));
   return result.sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
+}
+
+/**
+ * 캘린더 칸의 라벨 — 그날 기록마다 '점 + 제목' 하나.
+ *
+ *   - 제목이 있으면 제목. 없으면 '블록 이름 · 내용 첫 줄'.
+ *   - 과목 목록 순서대로 위아래로 쌓는다 (여러 과목을 공부한 날은 과목별로 모인다).
+ *     같은 과목 안에서는 만든 순서.
+ *   - tooltip 에는 잘리지 않은 전체 제목과 소속을 담는다.
+ *
+ * @returns {Array<{ entry, block, subject, text: string, tooltip: string }>}
+ */
+export function selectCalendarLabels(state, index, dateKey) {
+  const rank = new Map(state.subjectOrder.map((id, i) => [id, i]));
+  const labels = [];
+
+  for (const entry of selectEntriesOfDate(index, dateKey)) {
+    const block = state.blocks[entry.blockId];
+    const subject = block ? state.subjects[block.subjectId] : null;
+    if (!block || !subject) continue;
+
+    const title = typeof entry.title === 'string' ? entry.title.trim() : '';
+    const firstLine = deriveTitleFromContent(entry.content);
+    const text = title || [block.name, firstLine].filter(Boolean).join(' · ') || block.name || '(제목 없음)';
+
+    labels.push({
+      entry,
+      block,
+      subject,
+      text,
+      tooltip: `${text}\n${subject.name} / ${block.name}`,
+    });
+  }
+
+  // entriesByDate 는 이미 생성 순이라 안정 정렬로 과목 순서만 맞추면 된다
+  return labels.sort((a, b) => (rank.get(a.subject.id) ?? 0) - (rank.get(b.subject.id) ?? 0));
 }
 
 // ─── Entry 문맥 (반대 경로 점프용) ──────────────────────────

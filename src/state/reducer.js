@@ -39,6 +39,7 @@ export const ACTIONS = {
   ENTRY_MOVE: 'entry/move',
 
   BUNDLE_APPLY: 'bundle/apply',
+  BUNDLES_APPLY: 'bundles/apply',
 
   SETTINGS_UPDATE: 'settings/update',
   EXPORT_MARK: 'export/mark',
@@ -155,6 +156,8 @@ export function reducer(state, action) {
             progressPercent: normalizePercent(progressPercent),
             diagramCode: normalizeDiagram(diagramCode),
             svgCode: normalizeSvg(svgCode),
+            // 블록 정보(설명·진행률·그림)를 마지막으로 받거나 고친 시각. 이름만 있는 새 블록은 '모름'.
+            infoUpdatedAt: null,
             createdAt: at,
             updatedAt: at,
           },
@@ -176,9 +179,17 @@ export function reducer(state, action) {
       if (p.diagramCode !== undefined) patch.diagramCode = normalizeDiagram(p.diagramCode);
       if (p.svgCode !== undefined) patch.svgCode = normalizeSvg(p.svgCode);
 
+      const at = nowIso();
+      // 블록 정보 갱신 시각: 가져오기(markInfo)는 값이 같아도 '지금 기준으로 확인됨'이라 찍고,
+      // 손으로 고친 경우는 정보 항목이 실제로 바뀌었을 때만 찍는다 (이름·완료만 바꾼 건 아니다).
+      const infoChanged = INFO_FIELDS.some(
+        (key) => Object.hasOwn(patch, key) && patch[key] !== (current[key] ?? defaultInfo(key))
+      );
+      if (action.markInfo || infoChanged) patch.infoUpdatedAt = at;
+
       return touch({
         ...state,
-        blocks: { ...state.blocks, [action.id]: { ...current, ...patch, updatedAt: nowIso() } },
+        blocks: { ...state.blocks, [action.id]: { ...current, ...patch, updatedAt: at } },
       });
     }
 
@@ -326,71 +337,17 @@ export function reducer(state, action) {
      * state 를 보고 정하는 쪽이 낡은 값을 참조할 여지가 없다.
      */
     case ACTIONS.BUNDLE_APPLY: {
-      const { plan } = action;
-      const subject = state.subjects[plan.subjectId];
-      if (!subject) return state;
+      const next = applyBundlePlan(state, action.plan);
+      return next === state ? state : touch(next);
+    }
 
-      const at = nowIso();
-
-      const subjects = plan.subjectPatch
-        ? {
-            ...state.subjects,
-            [plan.subjectId]: {
-              ...subject,
-              description: String(plan.subjectPatch.description ?? ''),
-              diagramCode: normalizeDiagram(plan.subjectPatch.diagramCode),
-              svgCode: normalizeSvg(plan.subjectPatch.svgCode),
-              updatedAt: at,
-            },
-          }
-        : state.subjects;
-
-      const blocks = { ...state.blocks };
-      let nextOrder = nextBlockOrder(state, plan.subjectId);
-
-      for (const item of plan.blocks) {
-        const current = blocks[item.id];
-        const patch = {
-          description: String(item.patch.description ?? ''),
-          progressPercent: normalizePercent(item.patch.progressPercent),
-          diagramCode: normalizeDiagram(item.patch.diagramCode),
-          svgCode: normalizeSvg(item.patch.svgCode),
-        };
-
-        blocks[item.id] = current
-          ? { ...current, ...patch, updatedAt: at }
-          : {
-              id: item.id,
-              subjectId: plan.subjectId,
-              name: String(item.name ?? '').trim(),
-              isCompleted: false,
-              // 새로 만드는 블록이 여럿이면 순번이 겹치지 않게 하나씩 올린다
-              order: nextOrder++,
-              ...patch,
-              createdAt: at,
-              updatedAt: at,
-            };
-      }
-
-      const entries = { ...state.entries };
-      for (const item of plan.entries) {
-        const current = entries[item.id];
-        const data = {
-          date: item.data.date,
-          title: normalizeTitle(item.data.title),
-          tags: normalizeTags(item.data.tags),
-          content: String(item.data.content ?? ''),
-          progressPercent: normalizePercent(item.data.progressPercent),
-          diagramCode: normalizeDiagram(item.data.diagramCode),
-          svgCode: normalizeSvg(item.data.svgCode),
-        };
-
-        entries[item.id] = current
-          ? { ...current, ...data, blockId: item.blockId, updatedAt: at }
-          : { id: item.id, blockId: item.blockId, ...data, createdAt: at, updatedAt: at };
-      }
-
-      return touch({ ...state, subjects, blocks, entries });
+    /**
+     * 여러 과목에 걸친 일괄 반영 — '오늘 기록 붙여넣기'.
+     * 과목마다 계획이 하나씩이고, 액션 하나로 전부 반영하거나 하나도 반영하지 않는다.
+     */
+    case ACTIONS.BUNDLES_APPLY: {
+      const next = action.plans.reduce((acc, plan) => applyBundlePlan(acc, plan), state);
+      return next === state ? state : touch(next);
     }
 
     // ─── 설정 / 데이터 전체 ──────────────────────────────────
@@ -418,6 +375,96 @@ export function reducer(state, action) {
     default:
       return state;
   }
+}
+
+/**
+ * 계획 하나(과목 하나 분량)를 state 에 반영한다. BUNDLE_APPLY 와 BUNDLES_APPLY 가 같이 쓴다.
+ * 과목이 없으면 그대로 돌려준다.
+ */
+function applyBundlePlan(state, plan) {
+  const subject = state.subjects[plan.subjectId];
+  if (!subject) return state;
+
+  const at = nowIso();
+
+  const subjects = plan.subjectPatch
+    ? {
+        ...state.subjects,
+        [plan.subjectId]: {
+          ...subject,
+          description: String(plan.subjectPatch.description ?? ''),
+          diagramCode: normalizeDiagram(plan.subjectPatch.diagramCode),
+          svgCode: normalizeSvg(plan.subjectPatch.svgCode),
+          updatedAt: at,
+        },
+      }
+    : state.subjects;
+
+  const blocks = { ...state.blocks };
+  let nextOrder = nextBlockOrder(state, plan.subjectId);
+
+  for (const item of plan.blocks) {
+    const current = blocks[item.id];
+    // ---BLOCK--- 는 적은 항목만 바꾼다. undefined(빠진 항목)는 지금 값을 그대로 둔다.
+    // (지우려면 '(지움)' 으로 적어 null/'' 이 들어온다)
+    const p = item.patch;
+    const patch = {};
+    if (p.description !== undefined) patch.description = String(p.description ?? '');
+    if (p.progressPercent !== undefined) patch.progressPercent = normalizePercent(p.progressPercent);
+    if (p.diagramCode !== undefined) patch.diagramCode = normalizeDiagram(p.diagramCode);
+    if (p.svgCode !== undefined) patch.svgCode = normalizeSvg(p.svgCode);
+
+    // ---BLOCK--- 문서로 받은 정보면 갱신 시각을 찍는다. 과목 정보의 '블록 목록'으로
+    // 이름만 만든 뼈대(infoFromDoc === false)는 정보를 받은 게 아니므로 '모름'으로 둔다.
+    const infoUpdatedAt = item.infoFromDoc === false ? (current?.infoUpdatedAt ?? null) : at;
+
+    blocks[item.id] = current
+      ? { ...current, ...patch, infoUpdatedAt, updatedAt: at }
+      : {
+          id: item.id,
+          subjectId: plan.subjectId,
+          name: String(item.name ?? '').trim(),
+          isCompleted: false,
+          // 새로 만드는 블록이 여럿이면 순번이 겹치지 않게 하나씩 올린다
+          order: nextOrder++,
+          description: '',
+          progressPercent: null,
+          diagramCode: null,
+          svgCode: null,
+          ...patch,
+          infoUpdatedAt,
+          createdAt: at,
+          updatedAt: at,
+        };
+  }
+
+  const entries = { ...state.entries };
+  for (const item of plan.entries) {
+    const current = entries[item.id];
+    const data = {
+      date: item.data.date,
+      title: normalizeTitle(item.data.title),
+      tags: normalizeTags(item.data.tags),
+      content: String(item.data.content ?? ''),
+      progressPercent: normalizePercent(item.data.progressPercent),
+      diagramCode: normalizeDiagram(item.data.diagramCode),
+      svgCode: normalizeSvg(item.data.svgCode),
+    };
+
+    entries[item.id] = current
+      ? { ...current, ...data, blockId: item.blockId, updatedAt: at }
+      : { id: item.id, blockId: item.blockId, ...data, createdAt: at, updatedAt: at };
+  }
+
+  return { ...state, subjects, blocks, entries };
+}
+
+/** '블록 정보'에 해당하는 항목 — 갱신 시각(infoUpdatedAt)을 찍는 기준 */
+const INFO_FIELDS = ['description', 'progressPercent', 'diagramCode', 'svgCode'];
+
+/** 필드가 없던 예전 데이터와 비교할 때의 기본값 (정규화 결과와 같은 모양) */
+function defaultInfo(key) {
+  return key === 'description' ? '' : null;
 }
 
 /** 데이터가 바뀐 시각을 남긴다 — '내보내기 필요' 배너의 근거가 된다. */

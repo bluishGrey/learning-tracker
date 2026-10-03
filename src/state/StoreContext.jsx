@@ -129,7 +129,9 @@ export function StoreProvider({ children }) {
 
       // Block
       addBlock: (input) => withId(ACTIONS.BLOCK_ADD, input),
-      updateBlock: (id, patch) => dispatch({ type: ACTIONS.BLOCK_UPDATE, id, patch }),
+      /** markInfo: 가져오기처럼 '블록 정보를 지금 기준으로 받았다'면 값이 같아도 갱신 시각을 찍는다 */
+      updateBlock: (id, patch, { markInfo = false } = {}) =>
+        dispatch({ type: ACTIONS.BLOCK_UPDATE, id, patch, markInfo }),
       toggleBlock: (id) => dispatch({ type: ACTIONS.BLOCK_TOGGLE, id }),
       removeBlock: (id) => dispatch({ type: ACTIONS.BLOCK_REMOVE, id }),
       reorderBlocks: (subjectId, orderedIds) =>
@@ -138,6 +140,8 @@ export function StoreProvider({ children }) {
 
       /** 일괄 가져오기 — lib/importPlan.js 가 만든 계획을 한 번에 반영 */
       applyBundle: (plan) => dispatch({ type: ACTIONS.BUNDLE_APPLY, plan }),
+      /** 여러 과목에 걸친 계획들을 한 번에 — '오늘 기록 붙여넣기' */
+      applyBundles: (plans) => dispatch({ type: ACTIONS.BUNDLES_APPLY, plans }),
 
       // Entry
       addEntry: (input) => withId(ACTIONS.ENTRY_ADD, input),

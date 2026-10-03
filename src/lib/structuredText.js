@@ -17,20 +17,30 @@
  *
  * 설계 원칙 세 가지:
  *
- *  1. **과목·블록을 새로 만들지 않는다.** 이름이 기존 것과 정확히 일치하지 않으면
- *     오류를 내고 멈춘다. 오타 하나로 'Algebra' 와 'algebra' 두 과목에 기록이
- *     쪼개지는 사고가 이 앱에서 가장 복구하기 어려운 종류의 사고다.
+ *  1. **과목·블록을 새로 만들지 않는다.** 이름이 기존 것과 맞지 않으면(공백·대소문자는
+ *     무시하고 맞춰 본다) 오류를 내고 멈춘다. 오타 하나로 'Algebra' 와 'algebra' 두 과목에
+ *     기록이 쪼개지는 사고가 이 앱에서 가장 복구하기 어려운 종류의 사고다.
  *  2. **필수 항목이 없으면 절반만 채우지 않는다.** 무엇이 없는지 이름을 대고 멈춘다.
  *  3. **파싱은 순수 함수다.** state 를 읽는 해석(resolve)은 별도 함수로 분리해서,
  *     형식 검사만 따로 시험해 볼 수 있게 한다.
  */
 
 import { isValidDateKey } from './date.js';
+import { findByName, nameKey } from './nameMatch.js';
 
 export const SUBJECT_MARKER = '---SUBJECT---';
 export const ENTRY_MARKER = '---ENTRY---';
 export const BLOCK_MARKER = '---BLOCK---';
 export const END_MARKER = '---END---';
+
+/**
+ * 블록 정보에서 '이 항목을 지운다'를 뜻하는 값.
+ *
+ * ---BLOCK--- 는 **적은 항목만 바꾸고 빠진 항목은 그대로 둔다.** 공부하던 채팅의 Claude 는
+ * 트래커에 저장된 다이어그램·SVG 를 본 적이 없어서, 빠진 항목을 지움으로 읽으면 매일 그림이
+ * 지워진다. 정말 지우고 싶을 때만 `다이어그램: (지움)` 처럼 이 값을 적는다.
+ */
+export const CLEAR_TOKEN = '(지움)';
 
 const K = {
   DATE: '날짜',
@@ -84,47 +94,90 @@ const FORMS = {
 /**
  * ---ENTRY--- 텍스트 → 기록 입력 폼에 채울 값.
  *
- * @returns {{ ok: boolean, value: object|null, errors: string[], warnings: string[] }}
+ * 같은 텍스트 안에 그 기록이 속한 블록의 ---BLOCK--- 문서가 **하나** 함께 있으면
+ * 그것도 읽어 `block` 으로 돌려준다. 형식은 '블록 정보 가져오기'와 똑같다.
+ * 기록만 가져오다 보면 블록 설명·진행률·그림이 낡는데, claude.ai 에게 한 번에
+ * 받아 한 번에 붙여넣을 수 있게 하기 위해서다. 없으면 block 은 null — 예전과 같다.
+ *
+ * @returns {{ ok: boolean, value: object|null, block: object|null, errors: string[], warnings: string[] }}
  */
 export function parseEntryText(text) {
   const parsed = parseDocuments(text);
   if (!parsed.ok) {
-    return { ok: false, value: null, errors: parsed.errors, warnings: parsed.warnings };
+    return { ok: false, value: null, block: null, errors: parsed.errors, warnings: parsed.warnings };
   }
 
   const entries = parsed.docs.filter((d) => d.kind === 'entry');
-  const others = parsed.docs.filter((d) => d.kind !== 'entry');
+  const blocks = parsed.docs.filter((d) => d.kind === 'block');
+  const others = parsed.docs.filter((d) => d.kind !== 'entry' && d.kind !== 'block');
+  const fail = (errors) => ({ ok: false, value: null, block: null, errors, warnings: [] });
 
   if (entries.length === 0) {
-    return { ok: false, value: null, errors: [describeMissingMarker(others, FORMS.entry)], warnings: [] };
+    return fail([describeMissingMarker(parsed.docs, FORMS.entry)]);
   }
 
   // '새 기록' 은 이름 그대로 기록 하나를 다루는 화면이다. 여러 개가 한꺼번에
   // 반영되면 방금 무엇이 들어갔는지 화면에서 확인할 길이 없다.
   // 여러 기록은 그 목록을 이미 보여주고 있는 블록 상세에서 받는다.
   if (entries.length > 1) {
-    return {
-      ok: false,
-      value: null,
-      errors: [
-        `기록이 ${entries.length}개 들어 있습니다. 새 기록 화면에서는 기록 하나만 가져올 수 있습니다. 여러 개를 한 번에 가져오려면 블록 페이지의 '기록 전체 가져오기' 를 이용하세요.`,
-      ],
-      warnings: [],
-    };
+    return fail([
+      `기록이 ${entries.length}개 들어 있습니다. 새 기록 화면에서는 기록 하나만 가져올 수 있습니다. 여러 개를 한 번에 가져오려면 홈의 '오늘 기록 붙여넣기' 를 이용하세요.`,
+    ]);
   }
 
   if (others.length > 0) {
+    return fail([
+      `기록 외에 ${others.map((d) => FORMS[d.kind].label).join(', ')} 형식이 함께 들어 있습니다. 새 기록 화면에서는 기록 하나(와 그 블록의 블록 정보)만 가져올 수 있습니다. 여러 블록이 섞인 텍스트는 홈의 '오늘 기록 붙여넣기' 를 이용하세요.`,
+    ]);
+  }
+
+  const blockCheck = checkCompanionBlock(blocks, entries);
+  if (!blockCheck.ok) return fail(blockCheck.errors);
+
+  return {
+    ok: true,
+    value: entries[0].value,
+    block: blockCheck.block,
+    errors: [],
+    warnings: parsed.warnings,
+  };
+}
+
+/**
+ * 기록과 함께 붙여넣은 ---BLOCK--- 문서 검사 — 기록 가져오기 두 곳(새 기록·기록 전체)이 같이 쓴다.
+ *
+ * 하나까지만 받고, 그 블록이 기록들이 가리키는 블록과 **같아야** 한다(공백·대소문자 무시).
+ * 다른 블록의 정보가 섞여 들어와 엉뚱한 블록을 덮어쓰는 사고를 막는다.
+ *
+ * @returns {{ ok: boolean, block: object|null, errors: string[] }}
+ */
+export function checkCompanionBlock(blockDocs, entryDocs) {
+  if (blockDocs.length === 0) return { ok: true, block: null, errors: [] };
+  if (blockDocs.length > 1) {
     return {
       ok: false,
-      value: null,
-      errors: [
-        `기록 외에 ${others.map((d) => FORMS[d.kind].label).join(', ')} 형식이 함께 들어 있습니다. 새 기록 화면에서는 기록 하나만 가져올 수 있습니다.`,
-      ],
-      warnings: [],
+      block: null,
+      errors: [`블록 정보(${BLOCK_MARKER})가 ${blockDocs.length}개 있습니다. 여기서는 그 기록의 블록 정보 하나만 함께 넣을 수 있습니다. 여러 블록이 섞인 텍스트는 홈의 '오늘 기록 붙여넣기' 를 이용하세요.`],
     };
   }
 
-  return { ok: true, value: entries[0].value, errors: [], warnings: parsed.warnings };
+  const doc = blockDocs[0];
+  const wantSubject = nameKey(doc.value.subjectName);
+  const wantBlock = nameKey(doc.value.blockName);
+  const mismatched = entryDocs.filter(
+    (e) => nameKey(e.value.subjectName) !== wantSubject || nameKey(e.value.blockName) !== wantBlock
+  );
+  if (mismatched.length > 0) {
+    const e = mismatched[0].value;
+    return {
+      ok: false,
+      block: null,
+      errors: [
+        `${doc.line}번째 줄의 블록 정보는 '${doc.value.subjectName} / ${doc.value.blockName}' 의 것인데, 기록은 '${e.subjectName} / ${e.blockName}' 소속입니다. 같은 블록의 정보만 함께 가져올 수 있습니다.`,
+      ],
+    };
+  }
+  return { ok: true, block: doc.value, errors: [] };
 }
 
 /**
@@ -142,9 +195,10 @@ export function parseBlockText(text) {
       subjectName: f[K.SUBJECT],
       blockName: f[K.BLOCK],
       description: f[K.DESCRIPTION],
-      progressPercent: f[K.PROGRESS] ?? null,
-      diagramCode: f[K.DIAGRAM] ?? '',
-      svgCode: f[K.SVG] ?? '',
+      // 없는 항목은 undefined(그대로 둠), '(지움)' 은 null/''(비움)
+      progressPercent: keepOrClear(f, K.PROGRESS, null),
+      diagramCode: keepOrClear(f, K.DIAGRAM, ''),
+      svgCode: keepOrClear(f, K.SVG, ''),
     },
     errors: [],
     warnings: parsed.warnings,
@@ -194,7 +248,7 @@ export function parseSubjectText(text) {
  * 복사가 조금 어긋나도 앞 문서까지는 살린다.
  */
 function sliceDocuments(text) {
-  const lines = String(text ?? '').replace(/\r\n?/g, '\n').split('\n');
+  const lines = unwrapOuterFences(String(text ?? '').replace(/\r\n?/g, '\n').split('\n'));
   const byMarker = new Map(Object.entries(FORMS).map(([name, form]) => [form.marker, name]));
 
   const docs = [];
@@ -221,6 +275,52 @@ function sliceDocuments(text) {
 
   if (open) docs.push({ ...open, bodyLines: lines.slice(open.from) });
   return { lines, docs };
+}
+
+/**
+ * 문서들을 감싼 코드블록 펜스를 걷어낸다.
+ *
+ * claude.ai 는 복사하기 쉽게 답 전체를 코드블록(```` 나 ```text)으로 감싸 주곤 한다.
+ * 그 펜스가 남아 있으면 아래 규칙("코드펜스 안의 줄은 마커가 아니다") 때문에 문서가 하나도
+ * 안 읽힌다. 그래서 **감싸는 펜스**로 보이는 줄만 빈 줄로 바꾼다.
+ *   - 문서 바깥(마커 ~ ---END--- 사이가 아닌 곳)에 있고,
+ *   - 백틱 4개 이상이거나, 바로 다음(빈 줄 제외) 줄이 문서 시작 마커이거나,
+ *     바로 앞 줄이 ---END--- 인 펜스
+ * 문서 안의 펜스(내용 속 예시, mermaid)는 건드리지 않는다.
+ * 줄 수는 그대로 둔다 — 오류 메시지의 'N번째 줄'이 붙여넣은 텍스트와 맞아야 한다.
+ */
+function unwrapOuterFences(lines) {
+  const markers = new Set(Object.values(FORMS).map((f) => f.marker));
+  const fence = /^\s*(`{3,})[\w-]*\s*$/;
+  const neighbor = (from, step) => {
+    for (let i = from + step; i >= 0 && i < lines.length; i += step) {
+      const t = lines[i].trim();
+      if (t) return t;
+    }
+    return '';
+  };
+
+  // 문서 안(마커 ~ ---END---)의 펜스는 내용의 일부다. 감싸는 펜스는 문서 바깥에만 있다.
+  let inDoc = false;
+  let inFence = false;
+  return lines.map((line, i) => {
+    const m = fence.exec(line);
+    if (m) {
+      const wrapper =
+        !inDoc &&
+        !inFence &&
+        (m[1].length >= 4 || markers.has(neighbor(i, 1)) || neighbor(i, -1) === END_MARKER);
+      if (wrapper) return '';
+      inFence = !inFence;
+      return line;
+    }
+    if (!inFence) {
+      const t = line.trim();
+      if (markers.has(t)) inDoc = true;
+      else if (t === END_MARKER) inDoc = false;
+    }
+    return line;
+  });
 }
 
 /**
@@ -271,6 +371,15 @@ function parseBody(body, form) {
     fields[key] = value;
   }
 
+  // ─ '(지움)' — 항목은 있되 값을 비운다 (아래 변환을 거치지 않게 먼저 걷어 둔다) ─
+  const cleared = new Set();
+  for (const key of [K.PROGRESS, K.DIAGRAM, K.SVG]) {
+    if (fields[key] === CLEAR_TOKEN) {
+      cleared.add(key);
+      delete fields[key];
+    }
+  }
+
   // ─ 필수 항목 ─
   const missing = form.required.filter((key) => !Object.hasOwn(fields, key));
   if (missing.length > 0) {
@@ -301,7 +410,7 @@ function parseBody(body, form) {
     }
   }
 
-  if (Object.hasOwn(fields, K.DIAGRAM)) {
+  if (Object.hasOwn(fields, K.DIAGRAM) && fields[K.DIAGRAM] !== null) {
     fields[K.DIAGRAM] = stripCodeFence(fields[K.DIAGRAM]);
     if (fields[K.DIAGRAM].length === 0) delete fields[K.DIAGRAM];
   }
@@ -310,6 +419,7 @@ function parseBody(body, form) {
     return { ok: false, value: null, fields: null, errors, warnings };
   }
 
+  for (const key of cleared) fields[key] = null;
   return { ok: true, value: null, fields, errors, warnings };
 }
 
@@ -386,9 +496,10 @@ function toValue(kind, f) {
       subjectName: f[K.SUBJECT],
       blockName: f[K.BLOCK],
       description: f[K.DESCRIPTION],
-      progressPercent: f[K.PROGRESS] ?? null,
-      diagramCode: f[K.DIAGRAM] ?? '',
-      svgCode: f[K.SVG] ?? '',
+      // 없는 항목은 undefined(그대로 둠), '(지움)' 은 null/''(비움)
+      progressPercent: keepOrClear(f, K.PROGRESS, null),
+      diagramCode: keepOrClear(f, K.DIAGRAM, ''),
+      svgCode: keepOrClear(f, K.SVG, ''),
     };
   }
   return {
@@ -402,6 +513,12 @@ function toValue(kind, f) {
     diagramCode: f[K.DIAGRAM] ?? '',
     svgCode: f[K.SVG] ?? '',
   };
+}
+
+/** 블록 정보 항목: 없으면 undefined(그대로 둠), '(지움)'이면 cleared 값, 아니면 그 값 */
+function keepOrClear(f, key, cleared) {
+  if (!Object.hasOwn(f, key)) return undefined;
+  return f[key] === null ? cleared : f[key];
 }
 
 /** 시작 표시가 없을 때 — 다른 형식을 붙여넣은 경우를 따로 짚어준다 */
@@ -486,76 +603,63 @@ function escapeRegExp(text) {
  *
  * **없으면 만들지 않는다.** 이게 이 함수의 존재 이유다. 자동 생성을 허용하면
  * 오타 한 번에 과목이 둘로 갈라지고, 그 뒤로 진도율·활성도·간트가 전부 어긋난다.
- * 대신 대소문자·공백만 다른 후보가 있으면 오류 메시지에 그 이름을 적어준다.
  *
- * @returns {{ ok: boolean, subjectId: string|null, blockId: string|null, errors: string[] }}
+ * 이름은 lib/nameMatch.js 의 규칙으로 찾는다 — 정확한 이름이 먼저, 없으면 공백·대소문자를
+ * 무시한 이름. 후자로 찾았으면 warnings 에 적어 화면이 알려줄 수 있게 한다.
+ *
+ * @returns {{ ok: boolean, subjectId: string|null, blockId: string|null, errors: string[], warnings: string[] }}
  */
 export function resolveTarget(state, { subjectName, blockName }) {
   const wantedSubject = String(subjectName ?? '').trim();
   const wantedBlock = String(blockName ?? '').trim();
+  const warnings = [];
 
   const subjects = Object.values(state.subjects ?? {});
-  const subjectMatches = subjects.filter((s) => String(s.name ?? '').trim() === wantedSubject);
+  const subjectFound = findByName(subjects, wantedSubject);
 
-  if (subjectMatches.length === 0) {
-    const near = subjects.find((s) => looseEqual(s.name, wantedSubject));
+  if (!subjectFound.match) {
+    const many = subjectFound.ambiguous;
     return {
       ok: false,
       subjectId: null,
       blockId: null,
+      warnings,
       errors: [
-        near
-          ? `'${wantedSubject}'라는 과목을 찾을 수 없습니다. 이름이 비슷한 "${near.name}" 이(가) 있습니다 — 이름을 정확히 맞춰주세요.`
+        many.length > 1
+          ? `'${wantedSubject}'와 같은 이름(공백·대소문자 무시)의 과목이 ${many.length}개 있어 어느 쪽인지 알 수 없습니다. (${many.map((s) => `"${s.name}"`).join(', ')}) 과목 이름을 서로 다르게 바꾼 뒤 다시 시도해주세요.`
           : `'${wantedSubject}'라는 과목을 찾을 수 없습니다. 먼저 과목을 만들거나 이름을 확인해주세요.`,
       ],
     };
   }
-  if (subjectMatches.length > 1) {
-    return {
-      ok: false,
-      subjectId: null,
-      blockId: null,
-      errors: [
-        `'${wantedSubject}'라는 이름의 과목이 ${subjectMatches.length}개 있어 어느 쪽인지 알 수 없습니다. 과목 이름을 서로 다르게 바꾼 뒤 다시 시도해주세요.`,
-      ],
-    };
+
+  const subject = subjectFound.match;
+  if (subjectFound.loose) {
+    warnings.push(`과목 '${wantedSubject}' 을(를) 기존 과목 "${subject.name}" 으로 맞춰 읽었습니다.`);
   }
 
-  const subject = subjectMatches[0];
   const blocks = Object.values(state.blocks ?? {}).filter((b) => b.subjectId === subject.id);
-  const blockMatches = blocks.filter((b) => String(b.name ?? '').trim() === wantedBlock);
+  const blockFound = findByName(blocks, wantedBlock);
 
-  if (blockMatches.length === 0) {
-    const near = blocks.find((b) => looseEqual(b.name, wantedBlock));
+  if (!blockFound.match) {
+    const many = blockFound.ambiguous;
     return {
       ok: false,
       subjectId: subject.id,
       blockId: null,
+      warnings,
       errors: [
-        near
-          ? `'${subject.name}' 과목에 '${wantedBlock}'라는 블록이 없습니다. 이름이 비슷한 "${near.name}" 이(가) 있습니다 — 이름을 정확히 맞춰주세요.`
+        many.length > 1
+          ? `'${subject.name}' 과목에 '${wantedBlock}'와 같은 이름(공백·대소문자 무시)의 블록이 ${many.length}개 있어 어느 쪽인지 알 수 없습니다. (${many.map((b) => `"${b.name}"`).join(', ')})`
           : `'${subject.name}' 과목에 '${wantedBlock}'라는 블록이 없습니다. 먼저 블록을 만들거나 이름을 확인해주세요.`,
       ],
     };
   }
-  if (blockMatches.length > 1) {
-    return {
-      ok: false,
-      subjectId: subject.id,
-      blockId: null,
-      errors: [
-        `'${subject.name}' 과목에 '${wantedBlock}'라는 블록이 ${blockMatches.length}개 있어 어느 쪽인지 알 수 없습니다.`,
-      ],
-    };
+
+  if (blockFound.loose) {
+    warnings.push(`블록 '${wantedBlock}' 을(를) 기존 블록 "${blockFound.match.name}" 으로 맞춰 읽었습니다.`);
   }
 
-  return { ok: true, subjectId: subject.id, blockId: blockMatches[0].id, errors: [] };
-}
-
-/** 대소문자와 공백만 다른 이름인지 (오타 후보 제안용) */
-function looseEqual(a, b) {
-  const flat = (v) => String(v ?? '').replace(/\s+/g, '').toLowerCase();
-  return flat(a) === flat(b) && flat(a).length > 0;
+  return { ok: true, subjectId: subject.id, blockId: blockFound.match.id, errors: [], warnings };
 }
 
 // ─── 생성: 내보내기 텍스트 ─────────────────────────────────
@@ -690,6 +794,58 @@ function entryRows(subject, block, entry) {
     [K.DIAGRAM, entry?.diagramCode, 'fence'],
     [K.SVG, entry?.svgCode, 'block'],
   ];
+}
+
+/**
+ * 'Claude에게 블록 갱신 요청' 텍스트 — 낡음 표시를 누르면 클립보드에 담긴다.
+ *
+ * 현재 블록 설명 + 최근 기록 3개(제목·진행률) + 요청문. 답은 ---BLOCK--- 형식으로
+ * 받아야 기록 가져오기에 함께 붙여넣거나 '블록 정보 가져오기'로 바로 되붙일 수 있다.
+ *
+ * ---BLOCK--- 는 적힌 항목만 바꾸므로 그림을 다시 적을 필요는 없다. 다만 다이어그램의 단계 문구를
+ * 고치려면 원문이 있어야 하므로 현재 다이어그램은 실어 보낸다 (SVG 는 유무만 알린다).
+ *
+ * @param {Array<{ date, title?, content?, progressPercent? }>} recentEntries 최신순
+ * @param {(entry) => string} titleOf 표시용 제목 (lib/entryTitle 을 넘긴다)
+ */
+export function buildBlockRefreshRequest(subject, block, recentEntries, titleOf) {
+  // 규칙은 docs/CLAUDE_AI_GUIDE.md 의 '블록 정보 동기화'와 같다. 한쪽을 고치면 다른 쪽도 고친다.
+  const latest = recentEntries.find((e) => e.progressPercent != null) ?? null;
+  const lines = [
+    `아래 학습 블록의 '블록 정보'를 최근 기록에 맞게 갱신해 주세요.`,
+    '',
+    `- 답은 ${BLOCK_MARKER} … ${END_MARKER} 문서 하나로만 주세요. (이 블록 하나만)`,
+    `- 과목·블록 이름은 아래와 글자 하나까지 똑같이 적어 주세요.`,
+    latest
+      ? `- 진행률은 가장 최근 기록의 진행률과 같은 값(${latest.progressPercent})으로 적어 주세요.`
+      : `- 진행률은 최근 기록까지 반영한 0~100 숫자로 적어 주세요.`,
+    `- 설명은 누적 요약으로 갱신해 주세요: 지금 어디까지 했고, 다음에 할 것이 무엇인지.`,
+    `- 다이어그램의 단계 문구(예: '정독 중' → '완료')를 현재 상태에 맞게 바꿔 주세요.`,
+    `- 적지 않은 항목은 트래커가 그대로 둡니다. 바꿀 항목만 적고, 지워야 할 항목만 '${CLEAR_TOKEN}' 이라고 적어 주세요.`,
+    `- 다이어그램을 바꿀 때는 일부가 아니라 전체 다이어그램을 적어 주세요.`,
+    '',
+    '[현재 블록 정보]',
+    `${K.SUBJECT}: ${subject?.name ?? ''}`,
+    `${K.BLOCK}: ${block?.name ?? ''}`,
+    `${K.PROGRESS}: ${block?.progressPercent == null ? '(없음)' : block.progressPercent}`,
+    `${K.DESCRIPTION}:`,
+    String(block?.description ?? '').trim() || '(비어 있음)',
+  ];
+
+  if (String(block?.diagramCode ?? '').trim()) {
+    lines.push('', `${K.DIAGRAM}:`, '```mermaid', block.diagramCode.trim(), '```');
+  }
+  if (String(block?.svgCode ?? '').trim()) {
+    lines.push('', `(${K.SVG} 있음 — 바꾸지 않을 거면 적지 않아도 그대로 남습니다.)`);
+  }
+
+  lines.push('', `[최근 기록 ${recentEntries.length}개 — 최신순]`);
+  recentEntries.forEach((entry, i) => {
+    const percent = entry.progressPercent == null ? '진행률 없음' : `진행률 ${entry.progressPercent}%`;
+    lines.push(`${i + 1}. ${entry.date} · ${titleOf(entry)} · ${percent}`);
+  });
+
+  return `${lines.join('\n')}\n`;
 }
 
 // ─── 안내 문구용 요약 ──────────────────────────────────────

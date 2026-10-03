@@ -1,7 +1,12 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useStore, useActions } from '../state/StoreContext.jsx';
-import { selectBlockEntries, selectBlockProgress, selectBlockTrend } from '../state/selectors.js';
+import {
+  selectBlockEntries,
+  selectBlockDisplayProgress,
+  selectBlockTrend,
+  selectProgressDrops,
+} from '../state/selectors.js';
 import Breadcrumb from '../components/Breadcrumb.jsx';
 import EntryRow from '../components/EntryRow.jsx';
 import Markdown from '../components/Markdown.jsx';
@@ -14,6 +19,8 @@ import ExchangeBar from '../components/ExchangeBar.jsx';
 import PasteImportSheet from '../components/PasteImportSheet.jsx';
 import ManualCopySheet, { useTextExport } from '../components/ManualCopySheet.jsx';
 import Sheet from '../components/Sheet.jsx';
+import BlockInfoDiff from '../components/BlockInfoDiff.jsx';
+import StaleBadge from '../components/StaleBadge.jsx';
 import NotFound from './NotFound.jsx';
 import {
   parseBlockText,
@@ -24,6 +31,7 @@ import {
   summarizeSelfInfo,
 } from '../lib/structuredText.js';
 import { planEntriesImport, describePlan } from '../lib/importPlan.js';
+import { blockSyncWarnings } from '../lib/blockSync.js';
 
 /**
  * 경로 B의 세 번째 단계 — 블록 하나.
@@ -59,8 +67,10 @@ export default function BlockView() {
   if (!subject || !block || block.subjectId !== subjectId) return <NotFound />;
 
   const entries = selectBlockEntries(index, blockId);
-  const progress = selectBlockProgress(block);
+  // 표시용 진행률: 가장 최근 기록의 값 → 없으면 블록 저장값 (앱이 새로 계산하지 않는다)
+  const progress = selectBlockDisplayProgress(index, block);
   const trend = selectBlockTrend(index, blockId);
+  const drops = selectProgressDrops(index, blockId);
 
   /**
    * 내보내기는 누를 때마다 **지금의 기록을 새로 훑어** 조립한다.
@@ -106,7 +116,7 @@ export default function BlockView() {
       };
     }
 
-    return parsed;
+    return { ...parsed, warnings: [...parsed.warnings, ...target.warnings] };
   };
 
   /** 여러 ---ENTRY--- 를 이 블록으로. 다른 블록의 기록이 섞여 있으면 계획기가 막는다. */
@@ -116,7 +126,18 @@ export default function BlockView() {
 
     const planned = planEntriesImport(state, parsed.docs, { subjectId, blockId });
     if (!planned.ok) return { ok: false, value: null, errors: planned.errors, warnings: [] };
-    return { ok: true, value: planned, errors: [], warnings: parsed.warnings };
+
+    const syncWarnings = blockSyncWarnings({
+      entries: parsed.docs.filter((d) => d.kind === 'entry').map((d) => d.value),
+      block: parsed.docs.find((d) => d.kind === 'block')?.value ?? null,
+      current: block,
+    });
+    return {
+      ok: true,
+      value: planned,
+      errors: [],
+      warnings: [...parsed.warnings, ...planned.warnings, ...syncWarnings],
+    };
   };
 
   const applyEntries = (planned) => {
@@ -128,12 +149,16 @@ export default function BlockView() {
   };
 
   const applyBlockInfo = (value) => {
-    actions.updateBlock(blockId, {
-      description: value.description,
-      progressPercent: value.progressPercent,
-      diagramCode: value.diagramCode,
-      svgCode: value.svgCode,
-    });
+    actions.updateBlock(
+      blockId,
+      {
+        description: value.description,
+        progressPercent: value.progressPercent,
+        diagramCode: value.diagramCode,
+        svgCode: value.svgCode,
+      },
+      { markInfo: true }
+    );
     actions.setNotice({
       level: 'success',
       message: `${block.name} 블록 정보를 갱신했습니다.`,
@@ -150,6 +175,8 @@ export default function BlockView() {
         ]}
       />
 
+      <StaleBadge subject={subject} block={block} />
+
       <h1 className="page__title">{block.name || '(이름 없음)'}</h1>
       <p className="page__sub">
         {subject.name} · 기록 {entries.length}개 · {block.isCompleted ? '완료' : '진행 중'}
@@ -164,7 +191,10 @@ export default function BlockView() {
           />
           <p className="page__sub">
             블록 진행률 {progress.percent}%{' '}
-            <span className="field__hint">— claude.ai 가 계산해 보내준 값입니다</span>
+            <span className="field__hint">
+              — claude.ai 가 계산해 보내준 값입니다{' '}
+              {progress.source === 'entry' ? '(최근 기록 기준)' : '(블록 정보 기준)'}
+            </span>
           </p>
         </div>
       )}
@@ -251,6 +281,7 @@ export default function BlockView() {
                 <EntryRow
                   entry={entry}
                   showDate
+                  progressDropped={drops.has(entry.id)}
                   to={`/subjects/${subjectId}/${blockId}/e/${entry.id}`}
                 />
               </li>
@@ -290,7 +321,7 @@ export default function BlockView() {
         open={importing === 'info'}
         onClose={() => setImporting(null)}
         title="블록 정보 가져오기"
-        hint={`claude.ai 가 만들어 준 ---BLOCK--- 형식 텍스트를 그대로 붙여넣으세요. '${subject.name} / ${block.name}' 의 설명·진행률·다이어그램·SVG 를 덮어씁니다.`}
+        hint={`claude.ai 가 만들어 준 ---BLOCK--- 형식 텍스트를 그대로 붙여넣으세요. '${subject.name} / ${block.name}' 의 설명·진행률·다이어그램·SVG 중 적힌 항목을 덮어씁니다. 적히지 않은 항목은 그대로 두고, 지우려면 '(지움)' 이라고 적습니다.`}
         placeholder={'---BLOCK---\n과목: ' + subject.name + '\n블록: ' + block.name + '\n\n설명:\n…\n---END---'}
         parse={readBlockInfo}
         applyLabel="블록 정보 갱신"
@@ -303,12 +334,19 @@ export default function BlockView() {
         open={importing === 'entries'}
         onClose={() => setImporting(null)}
         title="기록 전체 가져오기"
-        hint={`---ENTRY--- 문서가 여러 개 이어진 텍스트를 붙여넣으세요. 모두 '${subject.name} / ${block.name}' 소속이어야 하고, 같은 날짜·제목의 기록은 갱신합니다.`}
+        hint={`---ENTRY--- 문서가 여러 개 이어진 텍스트를 붙여넣으세요. 모두 '${subject.name} / ${block.name}' 소속이어야 하고, 같은 날짜·제목의 기록은 갱신합니다. 이 블록의 ---BLOCK--- 문서를 함께 넣으면 블록 정보도 갱신합니다.`}
         placeholder={`---ENTRY---\n날짜: 2026-09-18\n과목: ${subject.name}\n블록: ${block.name}\n\n내용:\n…\n---END---\n\n---ENTRY---\n…\n---END---`}
         parse={readEntries}
         applyLabel="기록 반영"
         onApply={applyEntries}
-        renderPreview={(planned) => <EntriesPlanPreview planned={planned} />}
+        renderPreview={(planned) => (
+          <>
+            <EntriesPlanPreview planned={planned} />
+            {planned.plan.blocks.map((item) => (
+              <BlockInfoDiff key={item.id} block={state.blocks[item.id]} patch={item.patch} />
+            ))}
+          </>
+        )}
       />
 
       {/* 삭제 확인 */}
@@ -371,11 +409,13 @@ function EntriesPlanPreview({ planned }) {
 
 /** 가져오기 직전에 보여줄 요약 — 무엇이 덮어써지는지 한눈에 */
 function BlockInfoPreview({ value }) {
+  // 적히지 않은 항목(undefined)은 그대로 두고, '(지움)'으로 적힌 항목만 비운다
+  const show = (v, fmt) => (v === undefined ? '그대로 (적히지 않음)' : v === null || v === '' ? '지움' : fmt(v));
   const rows = [
     ['설명', `${value.description.split('\n').length}줄`],
-    ['진행률', value.progressPercent == null ? '없음 (지움)' : `${value.progressPercent}%`],
-    ['다이어그램', value.diagramCode ? `${value.diagramCode.split('\n').length}줄` : '없음 (지움)'],
-    ['SVG', value.svgCode ? `${value.svgCode.length}자` : '없음 (지움)'],
+    ['진행률', show(value.progressPercent, (v) => `${v}%`)],
+    ['다이어그램', show(value.diagramCode, (v) => `${v.split('\n').length}줄`)],
+    ['SVG', show(value.svgCode, (v) => `${v.length}자`)],
   ];
 
   return (
