@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useStore, useActions } from '../state/StoreContext.jsx';
-import { selectBlocks, selectTagSuggestions } from '../state/selectors.js';
+import { selectBlocks, selectBlockEntries, selectTagSuggestions } from '../state/selectors.js';
 import Breadcrumb from '../components/Breadcrumb.jsx';
 import TagInput from '../components/TagInput.jsx';
 import DiagramEmbed from '../components/DiagramEmbed.jsx';
@@ -9,7 +9,7 @@ import SvgEmbed from '../components/SvgEmbed.jsx';
 import PasteImportSheet from '../components/PasteImportSheet.jsx';
 import NotFound from './NotFound.jsx';
 import { todayKey, isValidDateKey } from '../lib/date.js';
-import { deriveTitleFromContent } from '../lib/entryTitle.js';
+import { deriveTitleFromContent, entryTitle } from '../lib/entryTitle.js';
 import { parseEntryText, resolveTarget } from '../lib/structuredText.js';
 
 /**
@@ -129,8 +129,24 @@ export default function EntryEditor() {
     const target = resolveTarget(state, parsed.value);
     if (!target.ok) return { ...parsed, ok: false, errors: target.errors };
 
+    // '새 기록' 화면은 저장할 때마다 기록을 새로 만든다. 같은 텍스트를 두 번 붙여넣으면
+    // 같은 기록이 둘이 된다 — 막지는 않되(일부러일 수 있다) 미리 알려 준다.
+    const dupWarnings = [];
+    if (!isEdit) {
+      const wantTitle = String(parsed.value.title ?? '').trim();
+      const dup = selectBlockEntries(index, target.blockId).find(
+        (e) => e.date === parsed.value.date && String(e.title ?? '').trim() === wantTitle
+      );
+      if (dup) {
+        dupWarnings.push(
+          `같은 블록에 날짜·제목이 같은 기록이 이미 있습니다 (${dup.date} ${entryTitle(dup)}). 저장하면 기록이 하나 더 생깁니다. 기존 기록을 고치려면 그 기록의 '수정' 화면에서 가져오세요.`
+        );
+      }
+    }
+
     return {
       ...parsed,
+      warnings: [...parsed.warnings, ...target.warnings, ...dupWarnings],
       value: { ...parsed.value, subjectId: target.subjectId, blockId: target.blockId },
     };
   };

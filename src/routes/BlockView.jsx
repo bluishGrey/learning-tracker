@@ -113,7 +113,7 @@ export default function BlockView() {
       };
     }
 
-    return parsed;
+    return { ...parsed, warnings: [...parsed.warnings, ...target.warnings] };
   };
 
   /** 여러 ---ENTRY--- 를 이 블록으로. 다른 블록의 기록이 섞여 있으면 계획기가 막는다. */
@@ -123,7 +123,7 @@ export default function BlockView() {
 
     const planned = planEntriesImport(state, parsed.docs, { subjectId, blockId });
     if (!planned.ok) return { ok: false, value: null, errors: planned.errors, warnings: [] };
-    return { ok: true, value: planned, errors: [], warnings: parsed.warnings };
+    return { ok: true, value: planned, errors: [], warnings: [...parsed.warnings, ...planned.warnings] };
   };
 
   const applyEntries = (planned) => {

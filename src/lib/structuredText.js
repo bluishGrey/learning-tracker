@@ -17,15 +17,16 @@
  *
  * 설계 원칙 세 가지:
  *
- *  1. **과목·블록을 새로 만들지 않는다.** 이름이 기존 것과 정확히 일치하지 않으면
- *     오류를 내고 멈춘다. 오타 하나로 'Algebra' 와 'algebra' 두 과목에 기록이
- *     쪼개지는 사고가 이 앱에서 가장 복구하기 어려운 종류의 사고다.
+ *  1. **과목·블록을 새로 만들지 않는다.** 이름이 기존 것과 맞지 않으면(공백·대소문자는
+ *     무시하고 맞춰 본다) 오류를 내고 멈춘다. 오타 하나로 'Algebra' 와 'algebra' 두 과목에
+ *     기록이 쪼개지는 사고가 이 앱에서 가장 복구하기 어려운 종류의 사고다.
  *  2. **필수 항목이 없으면 절반만 채우지 않는다.** 무엇이 없는지 이름을 대고 멈춘다.
  *  3. **파싱은 순수 함수다.** state 를 읽는 해석(resolve)은 별도 함수로 분리해서,
  *     형식 검사만 따로 시험해 볼 수 있게 한다.
  */
 
 import { isValidDateKey } from './date.js';
+import { findByName } from './nameMatch.js';
 
 export const SUBJECT_MARKER = '---SUBJECT---';
 export const ENTRY_MARKER = '---ENTRY---';
@@ -486,76 +487,63 @@ function escapeRegExp(text) {
  *
  * **없으면 만들지 않는다.** 이게 이 함수의 존재 이유다. 자동 생성을 허용하면
  * 오타 한 번에 과목이 둘로 갈라지고, 그 뒤로 진도율·활성도·간트가 전부 어긋난다.
- * 대신 대소문자·공백만 다른 후보가 있으면 오류 메시지에 그 이름을 적어준다.
  *
- * @returns {{ ok: boolean, subjectId: string|null, blockId: string|null, errors: string[] }}
+ * 이름은 lib/nameMatch.js 의 규칙으로 찾는다 — 정확한 이름이 먼저, 없으면 공백·대소문자를
+ * 무시한 이름. 후자로 찾았으면 warnings 에 적어 화면이 알려줄 수 있게 한다.
+ *
+ * @returns {{ ok: boolean, subjectId: string|null, blockId: string|null, errors: string[], warnings: string[] }}
  */
 export function resolveTarget(state, { subjectName, blockName }) {
   const wantedSubject = String(subjectName ?? '').trim();
   const wantedBlock = String(blockName ?? '').trim();
+  const warnings = [];
 
   const subjects = Object.values(state.subjects ?? {});
-  const subjectMatches = subjects.filter((s) => String(s.name ?? '').trim() === wantedSubject);
+  const subjectFound = findByName(subjects, wantedSubject);
 
-  if (subjectMatches.length === 0) {
-    const near = subjects.find((s) => looseEqual(s.name, wantedSubject));
+  if (!subjectFound.match) {
+    const many = subjectFound.ambiguous;
     return {
       ok: false,
       subjectId: null,
       blockId: null,
+      warnings,
       errors: [
-        near
-          ? `'${wantedSubject}'라는 과목을 찾을 수 없습니다. 이름이 비슷한 "${near.name}" 이(가) 있습니다 — 이름을 정확히 맞춰주세요.`
+        many.length > 1
+          ? `'${wantedSubject}'와 같은 이름(공백·대소문자 무시)의 과목이 ${many.length}개 있어 어느 쪽인지 알 수 없습니다. (${many.map((s) => `"${s.name}"`).join(', ')}) 과목 이름을 서로 다르게 바꾼 뒤 다시 시도해주세요.`
           : `'${wantedSubject}'라는 과목을 찾을 수 없습니다. 먼저 과목을 만들거나 이름을 확인해주세요.`,
       ],
     };
   }
-  if (subjectMatches.length > 1) {
-    return {
-      ok: false,
-      subjectId: null,
-      blockId: null,
-      errors: [
-        `'${wantedSubject}'라는 이름의 과목이 ${subjectMatches.length}개 있어 어느 쪽인지 알 수 없습니다. 과목 이름을 서로 다르게 바꾼 뒤 다시 시도해주세요.`,
-      ],
-    };
+
+  const subject = subjectFound.match;
+  if (subjectFound.loose) {
+    warnings.push(`과목 '${wantedSubject}' 을(를) 기존 과목 "${subject.name}" 으로 맞춰 읽었습니다.`);
   }
 
-  const subject = subjectMatches[0];
   const blocks = Object.values(state.blocks ?? {}).filter((b) => b.subjectId === subject.id);
-  const blockMatches = blocks.filter((b) => String(b.name ?? '').trim() === wantedBlock);
+  const blockFound = findByName(blocks, wantedBlock);
 
-  if (blockMatches.length === 0) {
-    const near = blocks.find((b) => looseEqual(b.name, wantedBlock));
+  if (!blockFound.match) {
+    const many = blockFound.ambiguous;
     return {
       ok: false,
       subjectId: subject.id,
       blockId: null,
+      warnings,
       errors: [
-        near
-          ? `'${subject.name}' 과목에 '${wantedBlock}'라는 블록이 없습니다. 이름이 비슷한 "${near.name}" 이(가) 있습니다 — 이름을 정확히 맞춰주세요.`
+        many.length > 1
+          ? `'${subject.name}' 과목에 '${wantedBlock}'와 같은 이름(공백·대소문자 무시)의 블록이 ${many.length}개 있어 어느 쪽인지 알 수 없습니다. (${many.map((b) => `"${b.name}"`).join(', ')})`
           : `'${subject.name}' 과목에 '${wantedBlock}'라는 블록이 없습니다. 먼저 블록을 만들거나 이름을 확인해주세요.`,
       ],
     };
   }
-  if (blockMatches.length > 1) {
-    return {
-      ok: false,
-      subjectId: subject.id,
-      blockId: null,
-      errors: [
-        `'${subject.name}' 과목에 '${wantedBlock}'라는 블록이 ${blockMatches.length}개 있어 어느 쪽인지 알 수 없습니다.`,
-      ],
-    };
+
+  if (blockFound.loose) {
+    warnings.push(`블록 '${wantedBlock}' 을(를) 기존 블록 "${blockFound.match.name}" 으로 맞춰 읽었습니다.`);
   }
 
-  return { ok: true, subjectId: subject.id, blockId: blockMatches[0].id, errors: [] };
-}
-
-/** 대소문자와 공백만 다른 이름인지 (오타 후보 제안용) */
-function looseEqual(a, b) {
-  const flat = (v) => String(v ?? '').replace(/\s+/g, '').toLowerCase();
-  return flat(a) === flat(b) && flat(a).length > 0;
+  return { ok: true, subjectId: subject.id, blockId: blockFound.match.id, errors: [], warnings };
 }
 
 // ─── 생성: 내보내기 텍스트 ─────────────────────────────────

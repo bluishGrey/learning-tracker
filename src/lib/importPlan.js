@@ -17,6 +17,7 @@
  *
  *   과목 — 이름. 없으면 만들지 않고 오류를 낸다 (가져오기의 기준점이다).
  *   블록 — 그 과목 안에서의 이름. 없으면 새로 만든다.
+ *   (이름은 lib/nameMatch.js 규칙 — 정확히 같은 이름이 먼저, 없으면 공백·대소문자 무시)
  *   기록 — 같은 블록 안에서 '날짜 + 제목'. 없으면 새로 만든다.
  *
  * 과목만 자동 생성하지 않는 이유는 오타 사고 때문이다. 'Algebra' 를 'algebra' 로
@@ -26,6 +27,7 @@
  */
 
 import { newId } from './id.js';
+import { nameKey, findByName } from './nameMatch.js';
 
 /**
  * 블록 하나에 기록들을 몰아넣는 계획 — 블록 상세의 '기록 전체 가져오기'.
@@ -58,7 +60,7 @@ export function planEntriesImport(state, docs, { subjectId, blockId }) {
   for (const doc of entryDocs) {
     const wantSubject = String(doc.value.subjectName ?? '').trim();
     const wantBlock = String(doc.value.blockName ?? '').trim();
-    if (wantSubject !== String(subject.name).trim() || wantBlock !== String(block.name).trim()) {
+    if (nameKey(wantSubject) !== nameKey(subject.name) || nameKey(wantBlock) !== nameKey(block.name)) {
       errors.push(
         `${doc.line}번째 줄의 기록은 '${wantSubject} / ${wantBlock}' 소속입니다. 지금 보고 있는 '${subject.name} / ${block.name}' 에는 넣을 수 없습니다.`
       );
@@ -82,12 +84,12 @@ export function planSubjectImport(state, docs, { subjectId }) {
   const subject = state.subjects[subjectId];
   if (!subject) return fail(['가져올 대상 과목을 찾을 수 없습니다.']);
 
-  const subjectName = String(subject.name).trim();
   const errors = [];
+  const warnings = [];
 
   for (const doc of docs) {
     const want = String(doc.value.subjectName ?? '').trim();
-    if (want !== subjectName) {
+    if (nameKey(want) !== nameKey(subject.name)) {
       errors.push(
         `${doc.line}번째 줄의 문서는 '${want}' 과목의 것입니다. 지금 보고 있는 '${subject.name}' 에는 넣을 수 없습니다.`
       );
@@ -109,16 +111,35 @@ export function planSubjectImport(state, docs, { subjectId }) {
     : null;
 
   // ─ 블록: 이름으로 맞춰 보고, 없으면 새로 만든다 ─
-  const existingBlocks = new Map();
-  for (const b of Object.values(state.blocks)) {
-    if (b.subjectId !== subjectId) continue;
-    const key = String(b.name ?? '').trim();
-    if (!existingBlocks.has(key)) existingBlocks.set(key, b);
-  }
+  const existingList = Object.values(state.blocks).filter((b) => b.subjectId === subjectId);
 
-  /** 이름 → blockId. 이번에 새로 만들 블록까지 포함해야 기록이 자리를 찾는다. */
-  const blockIdByName = new Map([...existingBlocks].map(([name, b]) => [name, b.id]));
+  /** 정규화 이름 → 이번에 새로 만들 블록 id. 같은 텍스트 안에서 이름이 조금 달라도 하나로 모인다. */
+  const newIdByKey = new Map();
   const blocks = [];
+
+  /**
+   * 이름 → { id, isNew } | null(모호). 기존 블록이 먼저, 그다음 이번에 새로 만들 블록.
+   * 정규화로 맞춘 경우는 경고로 남겨 미리보기에서 보이게 한다.
+   */
+  const lookup = (name, line) => {
+    const found = findByName(existingList, name);
+    if (found.match) {
+      if (found.loose) {
+        const note = `블록 '${name}' 을(를) 기존 블록 "${found.match.name}" 으로 맞춰 읽었습니다.`;
+        if (!warnings.includes(note)) warnings.push(note);
+      }
+      return { id: found.match.id, isNew: false, existing: found.match };
+    }
+    if (found.ambiguous.length > 1) {
+      errors.push(
+        `${line}번째 줄: '${name}' 와 같은 이름(공백·대소문자 무시)의 블록이 ${found.ambiguous.length}개 있어 어느 쪽인지 알 수 없습니다. (${found.ambiguous.map((b) => `"${b.name}"`).join(', ')})`
+      );
+      return null;
+    }
+    const key = nameKey(name);
+    if (newIdByKey.has(key)) return { id: newIdByKey.get(key), isNew: false, existing: null };
+    return undefined; // 아직 없음
+  };
 
   for (const doc of docs.filter((d) => d.kind === 'block')) {
     const name = String(doc.value.blockName ?? '').trim();
@@ -133,16 +154,15 @@ export function planSubjectImport(state, docs, { subjectId }) {
       svgCode: doc.value.svgCode,
     };
 
-    const existing = existingBlocks.get(name);
-    if (existing) {
-      blocks.push({ id: existing.id, name, patch, isNew: false });
-    } else if (blockIdByName.has(name)) {
-      // 같은 텍스트 안에 같은 블록이 두 번 — 뒤쪽 값으로 덮는다
-      blocks.push({ id: blockIdByName.get(name), name, patch, isNew: false });
+    const hit = lookup(name, doc.line);
+    if (hit === null) continue;
+    if (hit) {
+      // 기존 블록 갱신, 또는 같은 텍스트 안에 같은 블록이 두 번 — 뒤쪽 값으로 덮는다
+      blocks.push({ id: hit.id, name: hit.existing?.name ?? name, patch, isNew: false, infoFromDoc: true });
     } else {
       const id = newId();
-      blockIdByName.set(name, id);
-      blocks.push({ id, name, patch, isNew: true });
+      newIdByKey.set(nameKey(name), id);
+      blocks.push({ id, name, patch, isNew: true, infoFromDoc: true });
     }
   }
 
@@ -161,40 +181,45 @@ export function planSubjectImport(state, docs, { subjectId }) {
 
   if (listedNames) {
     for (const name of listedNames) {
-      if (existingBlocks.has(name)) {
-        skipped.push(name);
-        continue;
+      const hit = lookup(name, subjectDocs[0].line);
+      if (hit === null) continue;
+      if (hit) {
+        if (hit.existing) skipped.push(name);
+        continue; // 기존 블록이거나 이번 텍스트의 BLOCK 문서가 이미 맡았다
       }
-      if (blockIdByName.has(name)) continue; // 이번 텍스트의 BLOCK 문서가 이미 맡았다
 
       const id = newId();
-      blockIdByName.set(name, id);
+      newIdByKey.set(nameKey(name), id);
       blocks.push({
         id,
         name,
         patch: { description: '', progressPercent: null, diagramCode: '', svgCode: '' },
         isNew: true,
+        infoFromDoc: false,
       });
     }
   }
 
   // ─ 기록: 이름으로 소속 블록을 찾는다 (문서 순서가 아니라 적힌 이름 기준) ─
   const entryDocs = docs.filter((d) => d.kind === 'entry');
+  const entryBlockId = new Map();
   for (const doc of entryDocs) {
     const name = String(doc.value.blockName ?? '').trim();
-    if (!blockIdByName.has(name)) {
+    const hit = lookup(name, doc.line);
+    if (hit === null) continue;
+    if (!hit) {
       errors.push(
         `${doc.line}번째 줄의 기록이 가리키는 블록 '${name}' 을 찾을 수 없습니다. 그 블록의 ---BLOCK--- 문서를 함께 붙여넣거나, 먼저 블록을 만들어 주세요.`
       );
+      continue;
     }
+    entryBlockId.set(doc, hit.id);
   }
   if (errors.length > 0) return fail(errors);
 
-  const entries = planEntries(state, entryDocs, (doc) =>
-    blockIdByName.get(String(doc.value.blockName ?? '').trim())
-  );
+  const entries = planEntries(state, entryDocs, (doc) => entryBlockId.get(doc));
 
-  return done({ subjectId, subjectPatch, blocks, entries }, { skipped });
+  return done({ subjectId, subjectPatch, blocks, entries }, { skipped }, warnings);
 }
 
 // ─── 내부 ──────────────────────────────────────────────────
@@ -254,11 +279,11 @@ function fail(errors) {
   return { ok: false, errors, warnings: [], plan: null, summary: null };
 }
 
-function done(plan, extra = {}) {
+function done(plan, extra = {}, warnings = []) {
   return {
     ok: true,
     errors: [],
-    warnings: [],
+    warnings,
     plan,
     summary: {
       subjectUpdated: plan.subjectPatch !== null,

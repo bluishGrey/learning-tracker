@@ -127,7 +127,7 @@ export default function SubjectView() {
 
     const planned = planSubjectImport(state, parsed.docs, { subjectId });
     if (!planned.ok) return { ok: false, value: null, errors: planned.errors, warnings: [] };
-    return { ok: true, value: planned, errors: [], warnings: parsed.warnings };
+    return { ok: true, value: planned, errors: [], warnings: [...parsed.warnings, ...planned.warnings] };
   };
 
   const readBundle = (text) => {
@@ -136,7 +136,7 @@ export default function SubjectView() {
 
     const planned = planSubjectImport(state, parsed.docs, { subjectId });
     if (!planned.ok) return { ok: false, value: null, errors: planned.errors, warnings: [] };
-    return { ok: true, value: planned, errors: [], warnings: parsed.warnings };
+    return { ok: true, value: planned, errors: [], warnings: [...parsed.warnings, ...planned.warnings] };
   };
 
   const applyPlan = (planned) => {
@@ -413,7 +413,12 @@ function PlanSummary({ planned }) {
         ]}
       />
       {newBlocks.length > 0 && (
-        <p className="field__hint paste__note">새로 만들 블록: {newBlocks.join(', ')}</p>
+        <div className="callout callout--warn paste__note">
+          <strong>새로 생성됨:</strong> {newBlocks.join(', ')}
+          <p className="field__hint">
+            기존 블록과 이름이 맞지 않아 새 블록으로 만듭니다. 오타라면 취소하고 이름을 고쳐 주세요.
+          </p>
+        </div>
       )}
       {summary.skipped?.length > 0 && (
         <p className="field__hint paste__note">
