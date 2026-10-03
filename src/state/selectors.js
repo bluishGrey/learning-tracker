@@ -13,6 +13,7 @@ import {
   daysInYear,
   parseDateKey,
   toDateKey,
+  addDays,
 } from '../lib/date.js';
 import { activityAlpha, densityAlpha, nextFreeHueIndex } from '../lib/color.js';
 import { confusionRowsOf, rowMatches } from '../lib/confusionTable.js';
@@ -388,6 +389,98 @@ function snippetAround(text, needle) {
   const from = Math.max(0, at - SNIPPET_PAD);
   const to = Math.min(flat.length, at + needle.length + SNIPPET_PAD);
   return `${from > 0 ? '…' : ''}${flat.slice(from, to)}${to < flat.length ? '…' : ''}`;
+}
+
+// ─── 오늘의 복습 ───────────────────────────────────────────
+
+/** 오늘 기준 며칠 전 기록을 복습하나 (간격 반복) */
+export const REVIEW_OFFSETS = [1, 3, 7, 14];
+export const REVIEW_COUNT = 3;
+
+/**
+ * 홈의 '오늘의 복습' 카드에 띄울 헷갈림 행.
+ *
+ * 상태를 저장하지 않는다 — 날짜 계산만으로 정해진다.
+ *   1. 오늘로부터 1·3·7·14일 전 기록들의 헷갈림 행을 모아, 날짜로 만든 고정 시드로 섞어 고른다.
+ *      (같은 날에는 새로고침해도 같은 행이 나온다)
+ *   2. 모자라면 최근 기록(오늘 이전 → 오늘 → 그 밖 순, 날짜 최신순)의 행으로 채운다.
+ *   3. 행이 하나도 없으면 빈 배열 → 카드를 숨긴다.
+ *
+ * @returns {Array<{ entry, block, subject, row, daysAgo: number|null }>}
+ *   daysAgo — 간격 반복으로 뽑힌 행이면 며칠 전인지, 채우기로 뽑혔으면 null
+ */
+export function selectReviewRows(state, index, today = todayKey(), count = REVIEW_COUNT) {
+  const contextOf = (entry) => {
+    const block = state.blocks[entry.blockId];
+    const subject = block ? state.subjects[block.subjectId] : null;
+    return block && subject ? { block, subject } : null;
+  };
+  const rowsOfEntry = (entry, daysAgo) => {
+    const ctx = contextOf(entry);
+    if (!ctx) return [];
+    return confusionRowsOf(entry).map((row) => ({ entry, ...ctx, row, daysAgo }));
+  };
+
+  const pool = [];
+  for (const days of REVIEW_OFFSETS) {
+    for (const entry of index.entriesByDate.get(addDays(today, -days)) ?? []) {
+      pool.push(...rowsOfEntry(entry, days));
+    }
+  }
+
+  // 같은 질문이 여러 기록에 반복돼 있으면(다시 헷갈린 경우) 한 칸만 쓴다
+  const questionKey = (item) => item.row.question.replace(/\s+/g, ' ').trim().toLowerCase();
+  const seenQuestions = new Set();
+  const taken = new Set();
+  const picked = [];
+  const take = (item) => {
+    const key = `${item.entry.id}:${item.row.rowIndex}`;
+    const q = questionKey(item);
+    if (taken.has(key) || (q && seenQuestions.has(q))) return;
+    taken.add(key);
+    if (q) seenQuestions.add(q);
+    picked.push(item);
+  };
+
+  for (const item of seededShuffle(pool, `review:${today}`)) {
+    if (picked.length >= count) return picked;
+    take(item);
+  }
+  if (picked.length >= count) return picked;
+
+  const rank = (date) => (date < today ? 0 : date === today ? 1 : 2);
+  const recent = Object.values(state.entries).sort(
+    (a, b) => rank(a.date) - rank(b.date) || byDateThenCreated(b, a)
+  );
+  for (const entry of recent) {
+    for (const item of rowsOfEntry(entry, null)) {
+      take(item);
+      if (picked.length >= count) return picked;
+    }
+  }
+  return picked;
+}
+
+/** 문자열 시드로 고정된 셔플 (FNV-1a 해시 → mulberry32). 원본 배열은 건드리지 않는다. */
+function seededShuffle(list, seedText) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < seedText.length; i += 1) {
+    h ^= seedText.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  let t = h >>> 0;
+  const random = () => {
+    t = (t + 0x6d2b79f5) >>> 0;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+  const out = [...list];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }
 
 // ─── 캘린더 ────────────────────────────────────────────────

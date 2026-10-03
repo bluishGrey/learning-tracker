@@ -2139,3 +2139,77 @@
     background: var(--warn-soft);
   }
 }
+
+/* ═══ 오늘의 복습 카드 ═══════════════════════════════════════ */
+
+.reviewcard {
+  margin-top: 0;
+  margin-bottom: var(--sp-4);
+}
+
+.reviewcard__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.reviewcard__item {
+  display: grid;
+  gap: 6px;
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.reviewcard__q {
+  font-weight: 650;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.reviewcard__q:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.reviewcard__a {
+  justify-self: start;
+  max-width: 100%;
+  padding: 4px var(--sp-2);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-faint);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+}
+
+.reviewcard__a--open {
+  border-style: solid;
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.reviewcard__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--text-faint);
+}
+
+.reviewcard__badge {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-2);
+}

@@ -9,6 +9,7 @@ import {
 import CalendarPanel from '../components/CalendarPanel.jsx';
 import SubjectDot from '../components/SubjectDot.jsx';
 import YearGantt from '../components/YearGantt.jsx';
+import ReviewCard from '../components/ReviewCard.jsx';
 import { todayKey, monthKeyOf, formatFullDate, parseDateKey } from '../lib/date.js';
 
 /**
@@ -55,6 +56,9 @@ export default function Home() {
           + 새 기록
         </Link>
       </div>
+
+      {/* 헷갈림 행이 하나도 없으면 스스로 숨는다 */}
+      <ReviewCard />
 
       <CalendarPanel monthKey={monthKeyOf(today)} />
 
