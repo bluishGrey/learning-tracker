@@ -112,13 +112,13 @@ export function parseEntryText(text) {
   // 여러 기록은 그 목록을 이미 보여주고 있는 블록 상세에서 받는다.
   if (entries.length > 1) {
     return fail([
-      `기록이 ${entries.length}개 들어 있습니다. 새 기록 화면에서는 기록 하나만 가져올 수 있습니다. 여러 개를 한 번에 가져오려면 블록 페이지의 '기록 전체 가져오기' 를 이용하세요.`,
+      `기록이 ${entries.length}개 들어 있습니다. 새 기록 화면에서는 기록 하나만 가져올 수 있습니다. 여러 개를 한 번에 가져오려면 홈의 '오늘 기록 붙여넣기' 를 이용하세요.`,
     ]);
   }
 
   if (others.length > 0) {
     return fail([
-      `기록 외에 ${others.map((d) => FORMS[d.kind].label).join(', ')} 형식이 함께 들어 있습니다. 새 기록 화면에서는 기록 하나(와 그 블록의 블록 정보)만 가져올 수 있습니다.`,
+      `기록 외에 ${others.map((d) => FORMS[d.kind].label).join(', ')} 형식이 함께 들어 있습니다. 새 기록 화면에서는 기록 하나(와 그 블록의 블록 정보)만 가져올 수 있습니다. 여러 블록이 섞인 텍스트는 홈의 '오늘 기록 붙여넣기' 를 이용하세요.`,
     ]);
   }
 
@@ -148,7 +148,7 @@ export function checkCompanionBlock(blockDocs, entryDocs) {
     return {
       ok: false,
       block: null,
-      errors: [`블록 정보(${BLOCK_MARKER})가 ${blockDocs.length}개 있습니다. 기록 가져오기에는 그 기록의 블록 정보 하나만 함께 넣을 수 있습니다.`],
+      errors: [`블록 정보(${BLOCK_MARKER})가 ${blockDocs.length}개 있습니다. 여기서는 그 기록의 블록 정보 하나만 함께 넣을 수 있습니다. 여러 블록이 섞인 텍스트는 홈의 '오늘 기록 붙여넣기' 를 이용하세요.`],
     };
   }
 

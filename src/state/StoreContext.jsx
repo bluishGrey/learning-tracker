@@ -140,6 +140,8 @@ export function StoreProvider({ children }) {
 
       /** 일괄 가져오기 — lib/importPlan.js 가 만든 계획을 한 번에 반영 */
       applyBundle: (plan) => dispatch({ type: ACTIONS.BUNDLE_APPLY, plan }),
+      /** 여러 과목에 걸친 계획들을 한 번에 — '오늘 기록 붙여넣기' */
+      applyBundles: (plans) => dispatch({ type: ACTIONS.BUNDLES_APPLY, plans }),
 
       // Entry
       addEntry: (input) => withId(ACTIONS.ENTRY_ADD, input),

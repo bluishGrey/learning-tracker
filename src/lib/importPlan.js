@@ -29,6 +29,7 @@
 import { newId } from './id.js';
 import { nameKey, findByName } from './nameMatch.js';
 import { checkCompanionBlock } from './structuredText.js';
+import { blockSyncWarnings } from './blockSync.js';
 
 /**
  * 블록 하나에 기록들을 몰아넣는 계획 — 블록 상세의 '기록 전체 가져오기'.
@@ -333,4 +334,142 @@ export function describePlan(summary) {
     rows.push(`이미 있어 건너뜀 ${summary.skipped.length}개 (${summary.skipped.join(', ')})`);
   }
   return rows.length > 0 ? rows.join(' · ') : '바뀌는 것이 없습니다';
+}
+
+// ─── 오늘 기록 붙여넣기 ─────────────────────────────────────
+
+/**
+ * '오늘 기록 붙여넣기' — 어느 화면에도 매이지 않은 일괄 가져오기.
+ *
+ * 평소 흐름은 공부하던 claude.ai 채팅에서 "오늘 하루치 기록 남겨줘"로 받은 텍스트를
+ * 통째로 붙여넣는 것 하나다. 그 텍스트에는 ENTRY 가 하나일 수도, 블록을 넘나들어 여럿일
+ * 수도 있고, 블록마다 BLOCK 이 따라온다. 그래서 과목 화면·블록 화면처럼 한 단위에 매인
+ * 가져오기로는 받을 수 없었다 (그게 병목이었다).
+ *
+ * 규칙은 과목 전체 가져오기(planSubjectImport)를 과목별로 돌린 것과 같다.
+ *   - 과목은 이름(공백·대소문자 무시)으로 찾고, 없으면 **만들지 않고 멈춘다.**
+ *   - 블록은 그 과목 안에서 찾고, 없으면 새로 만든다 (미리보기에 '새로 생성됨').
+ *   - 기록은 같은 블록 안에서 '날짜 + 제목'이 같으면 갱신 — 같은 텍스트를 두 번 붙여넣어도 중복되지 않는다.
+ *   - 과목 정보(---SUBJECT---)는 받지 않는다. 과목 구성은 과목 화면의 일이다.
+ *
+ * @returns {{ ok, errors, warnings, plans: object[]|null, summary: object|null, items: object[] }}
+ *   items — 미리보기용: 문서별 { kind, subjectName, blockName, isNewBlock, isNewEntry, data }
+ */
+export function planDailyImport(state, docs, today) {
+  const errors = [];
+  const warnings = [];
+
+  const subjectDocs = docs.filter((d) => d.kind === 'subject');
+  if (subjectDocs.length > 0) {
+    errors.push(
+      `과목 정보(---SUBJECT---)는 여기서 받지 않습니다 (${subjectDocs.map((d) => `${d.line}번째 줄`).join(', ')}). 과목 화면의 '과목 정보 가져오기'를 이용하세요.`
+    );
+  }
+
+  // ─ 과목별로 나누기 ─
+  const subjects = Object.values(state.subjects);
+  const groups = new Map(); // subjectId → docs[]
+  for (const doc of docs) {
+    if (doc.kind === 'subject') continue;
+    const want = String(doc.value.subjectName ?? '').trim();
+    const found = findByName(subjects, want);
+    if (!found.match) {
+      errors.push(
+        found.ambiguous.length > 1
+          ? `${doc.line}번째 줄: '${want}' 와 같은 이름(공백·대소문자 무시)의 과목이 ${found.ambiguous.length}개 있어 어느 쪽인지 알 수 없습니다.`
+          : `${doc.line}번째 줄: '${want}' 라는 과목이 없습니다. 과목은 자동으로 만들지 않습니다 — 과목 이름을 확인하거나 먼저 과목을 만들어 주세요.`
+      );
+      continue;
+    }
+    if (found.loose) {
+      const note = `과목 '${want}' 을(를) 기존 과목 "${found.match.name}" 으로 맞춰 읽었습니다.`;
+      if (!warnings.includes(note)) warnings.push(note);
+    }
+    if (!groups.has(found.match.id)) groups.set(found.match.id, []);
+    // planSubjectImport 는 문서의 과목 이름을 다시 확인하므로 실제 이름으로 맞춰 넘긴다
+    groups.get(found.match.id).push({ ...doc, value: { ...doc.value, subjectName: found.match.name } });
+  }
+  if (errors.length > 0) return dailyFail(errors);
+
+  if (groups.size === 0) return dailyFail(['가져올 기록이나 블록 정보가 없습니다.']);
+
+  const plans = [];
+  const items = [];
+  for (const [subjectId, groupDocs] of groups) {
+    const planned = planSubjectImport(state, groupDocs, { subjectId });
+    if (!planned.ok) {
+      errors.push(...planned.errors);
+      continue;
+    }
+    warnings.push(...planned.warnings);
+    plans.push({ plan: planned.plan, summary: planned.summary });
+
+    const subject = state.subjects[subjectId];
+    const blockName = (id) =>
+      state.blocks[id]?.name ?? planned.plan.blocks.find((b) => b.id === id)?.name ?? '?';
+    const isNewBlock = (id) => !state.blocks[id];
+
+    for (const b of planned.plan.blocks) {
+      items.push({ kind: 'block', subject, blockId: b.id, blockName: b.name, isNewBlock: b.isNew, patch: b.patch });
+    }
+    planned.plan.entries.forEach((e) => {
+      items.push({
+        kind: 'entry',
+        subject,
+        blockId: e.blockId,
+        blockName: blockName(e.blockId),
+        isNewBlock: isNewBlock(e.blockId),
+        isNewEntry: e.isNew,
+        data: e.data,
+      });
+    });
+
+    // ─ 블록 정보 동기화 규칙 검사 (블록마다) ─
+    const byBlock = new Map(); // 정규화 이름 → { entries: [], block: null, name }
+    const keyOf = (name) => nameKey(name);
+    for (const doc of groupDocs) {
+      const k = keyOf(doc.value.blockName);
+      if (!byBlock.has(k)) byBlock.set(k, { entries: [], block: null, name: doc.value.blockName });
+      if (doc.kind === 'entry') byBlock.get(k).entries.push(doc.value);
+      else byBlock.get(k).block = doc.value; // 같은 블록의 BLOCK 이 둘이면 뒤쪽이 반영된다
+    }
+    const existing = Object.values(state.blocks).filter((b) => b.subjectId === subjectId);
+    for (const group of byBlock.values()) {
+      if (group.entries.length === 0) continue; // BLOCK 만 온 블록은 비교할 기록이 없다
+      const current = findByName(existing, group.name).match;
+      for (const w of blockSyncWarnings({ entries: group.entries, block: group.block, current })) {
+        warnings.push(`[${subject.name} / ${current?.name ?? group.name}] ${w}`);
+      }
+    }
+  }
+  if (errors.length > 0) return dailyFail(errors);
+
+  // ─ 날짜: claude.ai 는 오늘 날짜를 모를 때가 있다 ─
+  if (today) {
+    const odd = [...new Set(items.filter((i) => i.kind === 'entry' && i.data.date !== today).map((i) => i.data.date))];
+    if (odd.length > 0) {
+      warnings.push(`기록 날짜가 오늘(${today})이 아닙니다: ${odd.join(', ')}. 맞는 날짜인지 확인하세요.`);
+    }
+  }
+
+  const sum = (key) => plans.reduce((n, p) => n + p.summary[key], 0);
+  return {
+    ok: true,
+    errors: [],
+    warnings,
+    plans: plans.map((p) => p.plan),
+    items,
+    summary: {
+      subjectUpdated: false,
+      blocksAdded: sum('blocksAdded'),
+      blocksUpdated: sum('blocksUpdated'),
+      entriesAdded: sum('entriesAdded'),
+      entriesUpdated: sum('entriesUpdated'),
+      skipped: [],
+    },
+  };
+}
+
+function dailyFail(errors) {
+  return { ok: false, errors, warnings: [], plans: null, items: [], summary: null };
 }

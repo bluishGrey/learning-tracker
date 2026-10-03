@@ -39,6 +39,7 @@ export const ACTIONS = {
   ENTRY_MOVE: 'entry/move',
 
   BUNDLE_APPLY: 'bundle/apply',
+  BUNDLES_APPLY: 'bundles/apply',
 
   SETTINGS_UPDATE: 'settings/update',
   EXPORT_MARK: 'export/mark',
@@ -336,76 +337,17 @@ export function reducer(state, action) {
      * state 를 보고 정하는 쪽이 낡은 값을 참조할 여지가 없다.
      */
     case ACTIONS.BUNDLE_APPLY: {
-      const { plan } = action;
-      const subject = state.subjects[plan.subjectId];
-      if (!subject) return state;
+      const next = applyBundlePlan(state, action.plan);
+      return next === state ? state : touch(next);
+    }
 
-      const at = nowIso();
-
-      const subjects = plan.subjectPatch
-        ? {
-            ...state.subjects,
-            [plan.subjectId]: {
-              ...subject,
-              description: String(plan.subjectPatch.description ?? ''),
-              diagramCode: normalizeDiagram(plan.subjectPatch.diagramCode),
-              svgCode: normalizeSvg(plan.subjectPatch.svgCode),
-              updatedAt: at,
-            },
-          }
-        : state.subjects;
-
-      const blocks = { ...state.blocks };
-      let nextOrder = nextBlockOrder(state, plan.subjectId);
-
-      for (const item of plan.blocks) {
-        const current = blocks[item.id];
-        const patch = {
-          description: String(item.patch.description ?? ''),
-          progressPercent: normalizePercent(item.patch.progressPercent),
-          diagramCode: normalizeDiagram(item.patch.diagramCode),
-          svgCode: normalizeSvg(item.patch.svgCode),
-        };
-
-        // ---BLOCK--- 문서로 받은 정보면 갱신 시각을 찍는다. 과목 정보의 '블록 목록'으로
-        // 이름만 만든 뼈대(infoFromDoc === false)는 정보를 받은 게 아니므로 '모름'으로 둔다.
-        const infoUpdatedAt = item.infoFromDoc === false ? (current?.infoUpdatedAt ?? null) : at;
-
-        blocks[item.id] = current
-          ? { ...current, ...patch, infoUpdatedAt, updatedAt: at }
-          : {
-              id: item.id,
-              subjectId: plan.subjectId,
-              name: String(item.name ?? '').trim(),
-              isCompleted: false,
-              // 새로 만드는 블록이 여럿이면 순번이 겹치지 않게 하나씩 올린다
-              order: nextOrder++,
-              ...patch,
-              infoUpdatedAt,
-              createdAt: at,
-              updatedAt: at,
-            };
-      }
-
-      const entries = { ...state.entries };
-      for (const item of plan.entries) {
-        const current = entries[item.id];
-        const data = {
-          date: item.data.date,
-          title: normalizeTitle(item.data.title),
-          tags: normalizeTags(item.data.tags),
-          content: String(item.data.content ?? ''),
-          progressPercent: normalizePercent(item.data.progressPercent),
-          diagramCode: normalizeDiagram(item.data.diagramCode),
-          svgCode: normalizeSvg(item.data.svgCode),
-        };
-
-        entries[item.id] = current
-          ? { ...current, ...data, blockId: item.blockId, updatedAt: at }
-          : { id: item.id, blockId: item.blockId, ...data, createdAt: at, updatedAt: at };
-      }
-
-      return touch({ ...state, subjects, blocks, entries });
+    /**
+     * 여러 과목에 걸친 일괄 반영 — '오늘 기록 붙여넣기'.
+     * 과목마다 계획이 하나씩이고, 액션 하나로 전부 반영하거나 하나도 반영하지 않는다.
+     */
+    case ACTIONS.BUNDLES_APPLY: {
+      const next = action.plans.reduce((acc, plan) => applyBundlePlan(acc, plan), state);
+      return next === state ? state : touch(next);
     }
 
     // ─── 설정 / 데이터 전체 ──────────────────────────────────
@@ -433,6 +375,82 @@ export function reducer(state, action) {
     default:
       return state;
   }
+}
+
+/**
+ * 계획 하나(과목 하나 분량)를 state 에 반영한다. BUNDLE_APPLY 와 BUNDLES_APPLY 가 같이 쓴다.
+ * 과목이 없으면 그대로 돌려준다.
+ */
+function applyBundlePlan(state, plan) {
+  const subject = state.subjects[plan.subjectId];
+  if (!subject) return state;
+
+  const at = nowIso();
+
+  const subjects = plan.subjectPatch
+    ? {
+        ...state.subjects,
+        [plan.subjectId]: {
+          ...subject,
+          description: String(plan.subjectPatch.description ?? ''),
+          diagramCode: normalizeDiagram(plan.subjectPatch.diagramCode),
+          svgCode: normalizeSvg(plan.subjectPatch.svgCode),
+          updatedAt: at,
+        },
+      }
+    : state.subjects;
+
+  const blocks = { ...state.blocks };
+  let nextOrder = nextBlockOrder(state, plan.subjectId);
+
+  for (const item of plan.blocks) {
+    const current = blocks[item.id];
+    const patch = {
+      description: String(item.patch.description ?? ''),
+      progressPercent: normalizePercent(item.patch.progressPercent),
+      diagramCode: normalizeDiagram(item.patch.diagramCode),
+      svgCode: normalizeSvg(item.patch.svgCode),
+    };
+
+    // ---BLOCK--- 문서로 받은 정보면 갱신 시각을 찍는다. 과목 정보의 '블록 목록'으로
+    // 이름만 만든 뼈대(infoFromDoc === false)는 정보를 받은 게 아니므로 '모름'으로 둔다.
+    const infoUpdatedAt = item.infoFromDoc === false ? (current?.infoUpdatedAt ?? null) : at;
+
+    blocks[item.id] = current
+      ? { ...current, ...patch, infoUpdatedAt, updatedAt: at }
+      : {
+          id: item.id,
+          subjectId: plan.subjectId,
+          name: String(item.name ?? '').trim(),
+          isCompleted: false,
+          // 새로 만드는 블록이 여럿이면 순번이 겹치지 않게 하나씩 올린다
+          order: nextOrder++,
+          ...patch,
+          infoUpdatedAt,
+          createdAt: at,
+          updatedAt: at,
+        };
+  }
+
+  const entries = { ...state.entries };
+  for (const item of plan.entries) {
+    const current = entries[item.id];
+    const data = {
+      date: item.data.date,
+      title: normalizeTitle(item.data.title),
+      tags: normalizeTags(item.data.tags),
+      content: String(item.data.content ?? ''),
+      progressPercent: normalizePercent(item.data.progressPercent),
+      diagramCode: normalizeDiagram(item.data.diagramCode),
+      svgCode: normalizeSvg(item.data.svgCode),
+    };
+
+    entries[item.id] = current
+      ? { ...current, ...data, blockId: item.blockId, updatedAt: at }
+      : { id: item.id, blockId: item.blockId, ...data, createdAt: at, updatedAt: at };
+  }
+
+  return { ...state, subjects, blocks, entries };
 }
 
 /** '블록 정보'에 해당하는 항목 — 갱신 시각(infoUpdatedAt)을 찍는 기준 */

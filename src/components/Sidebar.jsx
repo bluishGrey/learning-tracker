@@ -6,6 +6,7 @@ import SubjectDot from './SubjectDot.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
 import StaleBadge from './StaleBadge.jsx';
 import Highlight from './Highlight.jsx';
+import { useOpenDailyImport } from './DailyImport.jsx';
 import { entryTitle } from '../lib/entryTitle.js';
 import { todayKey, monthKeyOf, formatMonthDay } from '../lib/date.js';
 
@@ -25,6 +26,7 @@ import { todayKey, monthKeyOf, formatMonthDay } from '../lib/date.js';
 export default function Sidebar({ open, onNavigate, searchRef, onOpenHelp }) {
   const { state, index } = useStore();
   const location = useLocation();
+  const openDailyImport = useOpenDailyImport();
 
   const [query, setQuery] = useState('');
   const [openSubjects, setOpenSubjects] = useState(() => new Set());
@@ -74,8 +76,18 @@ export default function Sidebar({ open, onNavigate, searchRef, onOpenHelp }) {
         >
           🗓 캘린더
         </Link>
+        <button
+          type="button"
+          className="sidebar__navlink sidebar__navbtn"
+          onClick={() => {
+            onNavigate?.();
+            openDailyImport();
+          }}
+        >
+          ⤓ 오늘 기록 붙여넣기
+        </button>
         <Link to="/new" className="sidebar__navlink" onClick={onNavigate}>
-          ✏️ 새 기록
+          ✏️ 직접 쓰기
         </Link>
       </nav>
 

@@ -10,6 +10,7 @@ import CalendarPanel from '../components/CalendarPanel.jsx';
 import SubjectDot from '../components/SubjectDot.jsx';
 import YearGantt from '../components/YearGantt.jsx';
 import ReviewCard from '../components/ReviewCard.jsx';
+import { useOpenDailyImport } from '../components/DailyImport.jsx';
 import { todayKey, monthKeyOf, formatFullDate, parseDateKey } from '../lib/date.js';
 
 /**
@@ -23,6 +24,7 @@ import { todayKey, monthKeyOf, formatFullDate, parseDateKey } from '../lib/date.
  */
 export default function Home() {
   const { state, index } = useStore();
+  const openDailyImport = useOpenDailyImport();
   const today = todayKey();
 
   const todayEntries = selectEntriesOfDate(index, today);
@@ -52,9 +54,15 @@ export default function Home() {
             )}
           </p>
         </div>
-        <Link to={`/new?date=${today}`} className="btn btn--primary">
-          + 새 기록
-        </Link>
+        {/* 평소 흐름은 claude.ai 에서 받은 오늘치 기록을 붙여넣는 것 하나다 — 그래서 이쪽이 주 버튼 */}
+        <div className="home__actions">
+          <button type="button" className="btn btn--primary" onClick={openDailyImport}>
+            ⤓ 오늘 기록 붙여넣기
+          </button>
+          <Link to={`/new?date=${today}`} className="btn">
+            + 직접 쓰기
+          </Link>
+        </div>
       </div>
 
       {/* 헷갈림 행이 하나도 없으면 스스로 숨는다 */}
