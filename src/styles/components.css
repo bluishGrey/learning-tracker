@@ -307,19 +307,20 @@
 }
 
 .calendar__day {
-  aspect-ratio: 1;
+  position: relative;
+  min-width: 0;
+  min-height: 72px;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   justify-content: flex-start;
-  gap: 3px;
-  padding: 5px 2px;
+  gap: 2px;
+  padding: 4px 3px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: var(--surface-2);
   color: var(--text-dim);
   font-size: 0.8rem;
-  min-height: 44px;
 }
 
 .calendar__day--active {
@@ -338,22 +339,93 @@
   border-color: var(--border-strong);
 }
 
-.calendar__num {
-  line-height: 1.1;
+/* 칸 전체를 덮는 '그날 보기' 링크 — 라벨 링크들은 이 위에 올라간다 */
+.calendar__daylink {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
 }
 
-.calendar__dots {
+.calendar__daylink:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.calendar__num {
+  position: relative;
+  line-height: 1.1;
+  text-align: center;
+  pointer-events: none;
+}
+
+.calendar__labels {
+  position: relative;
+  z-index: 1;
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
+  flex-direction: column;
   gap: 2px;
+  min-width: 0;
+}
+
+.calendar__label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 1px 3px;
+  border-left: 2px solid var(--label-color);
+  border-radius: 3px;
+  background: var(--label-bg);
+  color: var(--text);
+  font-size: 0.64rem;
+  font-weight: 500;
+  line-height: 1.35;
+  text-decoration: none;
+}
+
+.calendar__label:hover {
+  filter: brightness(1.1);
+  text-decoration: underline;
+}
+
+.calendar__label .subject-dot {
+  flex: none;
+}
+
+.calendar__labeltext {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .calendar__more {
-  font-size: 0.6rem;
+  align-self: flex-start;
+  padding: 0 3px;
+  font-size: 0.62rem;
   color: var(--text-faint);
-  line-height: 1;
+  line-height: 1.3;
+  text-decoration: none;
+}
+
+.calendar__more:hover {
+  color: var(--accent);
+}
+
+/* 아주 좁은 화면 — 글자가 몇 자라도 더 들어가도록 여백·옆선을 걷고 글자를 줄인다 (점은 남긴다) */
+@media (max-width: 480px) {
+  .calendar__day {
+    min-height: 60px;
+    padding: 3px 1px;
+  }
+
+  .calendar__label {
+    gap: 2px;
+    padding: 0 2px;
+    border-left: none;
+    font-size: 0.58rem;
+  }
 }
 
 .legend {

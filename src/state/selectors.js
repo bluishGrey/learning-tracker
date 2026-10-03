@@ -17,6 +17,7 @@ import {
 } from '../lib/date.js';
 import { activityAlpha, densityAlpha, nextFreeHueIndex } from '../lib/color.js';
 import { confusionRowsOf, rowMatches } from '../lib/confusionTable.js';
+import { deriveTitleFromContent } from '../lib/entryTitle.js';
 
 /**
  * 밀도 계산 시 적용할 최소 기간.
@@ -506,6 +507,42 @@ export function selectSubjectsOnDate(state, index, dateKey) {
   // 과목 목록 순서대로 정렬해 날짜마다 점 순서가 흔들리지 않게 한다.
   const rank = new Map(state.subjectOrder.map((id, i) => [id, i]));
   return result.sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
+}
+
+/**
+ * 캘린더 칸의 라벨 — 그날 기록마다 '점 + 제목' 하나.
+ *
+ *   - 제목이 있으면 제목. 없으면 '블록 이름 · 내용 첫 줄'.
+ *   - 과목 목록 순서대로 위아래로 쌓는다 (여러 과목을 공부한 날은 과목별로 모인다).
+ *     같은 과목 안에서는 만든 순서.
+ *   - tooltip 에는 잘리지 않은 전체 제목과 소속을 담는다.
+ *
+ * @returns {Array<{ entry, block, subject, text: string, tooltip: string }>}
+ */
+export function selectCalendarLabels(state, index, dateKey) {
+  const rank = new Map(state.subjectOrder.map((id, i) => [id, i]));
+  const labels = [];
+
+  for (const entry of selectEntriesOfDate(index, dateKey)) {
+    const block = state.blocks[entry.blockId];
+    const subject = block ? state.subjects[block.subjectId] : null;
+    if (!block || !subject) continue;
+
+    const title = typeof entry.title === 'string' ? entry.title.trim() : '';
+    const firstLine = deriveTitleFromContent(entry.content);
+    const text = title || [block.name, firstLine].filter(Boolean).join(' · ') || block.name || '(제목 없음)';
+
+    labels.push({
+      entry,
+      block,
+      subject,
+      text,
+      tooltip: `${text}\n${subject.name} / ${block.name}`,
+    });
+  }
+
+  // entriesByDate 는 이미 생성 순이라 안정 정렬로 과목 순서만 맞추면 된다
+  return labels.sort((a, b) => (rank.get(a.subject.id) ?? 0) - (rank.get(b.subject.id) ?? 0));
 }
 
 // ─── Entry 문맥 (반대 경로 점프용) ──────────────────────────

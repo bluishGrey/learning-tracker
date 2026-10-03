@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useStore } from '../state/StoreContext.jsx';
-import { selectSubjectsOnDate } from '../state/selectors.js';
+import { selectSubjectsOnDate, selectCalendarLabels } from '../state/selectors.js';
 import CalendarGrid from './CalendarGrid.jsx';
 import SubjectDot from './SubjectDot.jsx';
 import { addMonths, formatMonthLabel, monthKeyOf, todayKey } from '../lib/date.js';
@@ -15,6 +15,11 @@ export default function CalendarPanel({ monthKey }) {
 
   const subjectsOnDate = useCallback(
     (dateKey) => selectSubjectsOnDate(state, index, dateKey),
+    [state, index]
+  );
+
+  const labelsOnDate = useCallback(
+    (dateKey) => selectCalendarLabels(state, index, dateKey),
     [state, index]
   );
 
@@ -55,7 +60,7 @@ export default function CalendarPanel({ monthKey }) {
         </Link>
       )}
 
-      <CalendarGrid monthKey={monthKey} subjectsOnDate={subjectsOnDate} />
+      <CalendarGrid monthKey={monthKey} labelsOnDate={labelsOnDate} />
 
       {monthSubjects.size > 0 && (
         <section className="section">
