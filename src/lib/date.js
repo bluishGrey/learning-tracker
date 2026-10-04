@@ -164,6 +164,38 @@ export function formatRelativeDay(dateKey, referenceKey = todayKey()) {
   return diff > 0 ? `${diff}일 전` : `${-diff}일 후`;
 }
 
+// ─── 마감일 ────────────────────────────────────────────────
+//
+// 마감(deadline)은 Subject/Block 의 선택 필드이고 dateKey 와 같은 'YYYY-MM-DD' 문자열이다.
+// D-day 계산·정렬은 전부 여기 두 함수만 거친다 — 화면마다 따로 계산하면
+// new Date('YYYY-MM-DD') 의 UTC 해석 같은 하루 어긋남이 어딘가에 다시 숨어든다.
+
+/**
+ * 마감까지 남은 날 → D-day 표시 정보. 마감이 없거나 형식이 틀리면 null.
+ *
+ * 오늘은 로컬 날짜(todayKey)이고, 차이는 daysBetween 이 날짜 숫자끼리 뺀다.
+ *   'D-5' (5일 남음) · 'D-day' (오늘) · 'D+2(지남)' (이틀 지남)
+ *
+ * @returns {{ days: number, overdue: boolean, label: string } | null}
+ */
+export function deadlineInfo(deadline, referenceKey = todayKey()) {
+  if (!isValidDateKey(deadline)) return null;
+  const days = daysBetween(referenceKey, deadline);
+  if (days === null) return null;
+  const label = days > 0 ? `D-${days}` : days === 0 ? 'D-day' : `D+${-days}(지남)`;
+  return { days, overdue: days < 0, label };
+}
+
+/** 마감일순 정렬 비교 함수 — 이른 마감이 앞, 마감이 없는(또는 읽을 수 없는) 항목은 맨 뒤 */
+export function compareDeadline(a, b) {
+  const ka = isValidDateKey(a) ? a : null;
+  const kb = isValidDateKey(b) ? b : null;
+  if (ka === kb) return 0;
+  if (ka === null) return 1;
+  if (kb === null) return -1;
+  return ka < kb ? -1 : 1;
+}
+
 /** 파일명 중복 방지용 시각 접미사 'HHmm' */
 export function timeSuffix(date = new Date()) {
   return `${pad2(date.getHours())}${pad2(date.getMinutes())}`;

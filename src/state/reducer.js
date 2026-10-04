@@ -16,6 +16,7 @@ import {
   normalizeDiagram,
   normalizePercent,
   normalizeCustomColor,
+  normalizeDeadline,
   createInitialState,
 } from '../storage/schema.js';
 import { nextFreeHueIndex } from '../lib/color.js';
@@ -102,6 +103,10 @@ export function reducer(state, action) {
       if (action.patch.svgCode !== undefined) {
         patch.svgCode = normalizeSvg(action.patch.svgCode);
       }
+      // null 이나 빈 값을 넘기면 마감이 지워진다
+      if (action.patch.deadline !== undefined) {
+        patch.deadline = normalizeDeadline(action.patch.deadline);
+      }
       return touch({
         ...state,
         subjects: {
@@ -178,6 +183,7 @@ export function reducer(state, action) {
       if (p.progressPercent !== undefined) patch.progressPercent = normalizePercent(p.progressPercent);
       if (p.diagramCode !== undefined) patch.diagramCode = normalizeDiagram(p.diagramCode);
       if (p.svgCode !== undefined) patch.svgCode = normalizeSvg(p.svgCode);
+      if (p.deadline !== undefined) patch.deadline = normalizeDeadline(p.deadline);
 
       const at = nowIso();
       // 블록 정보 갱신 시각: 가져오기(markInfo)는 값이 같아도 '지금 기준으로 확인됨'이라 찍고,
@@ -392,9 +398,7 @@ function applyBundlePlan(state, plan) {
         ...state.subjects,
         [plan.subjectId]: {
           ...subject,
-          description: String(plan.subjectPatch.description ?? ''),
-          diagramCode: normalizeDiagram(plan.subjectPatch.diagramCode),
-          svgCode: normalizeSvg(plan.subjectPatch.svgCode),
+          ...subjectPatchOf(plan.subjectPatch),
           updatedAt: at,
         },
       }
@@ -413,10 +417,13 @@ function applyBundlePlan(state, plan) {
     if (p.progressPercent !== undefined) patch.progressPercent = normalizePercent(p.progressPercent);
     if (p.diagramCode !== undefined) patch.diagramCode = normalizeDiagram(p.diagramCode);
     if (p.svgCode !== undefined) patch.svgCode = normalizeSvg(p.svgCode);
+    if (p.deadline !== undefined) patch.deadline = normalizeDeadline(p.deadline);
 
     // ---BLOCK--- 문서로 받은 정보면 갱신 시각을 찍는다. 과목 정보의 '블록 목록'으로
     // 이름만 만든 뼈대(infoFromDoc === false)는 정보를 받은 게 아니므로 '모름'으로 둔다.
-    const infoUpdatedAt = item.infoFromDoc === false ? (current?.infoUpdatedAt ?? null) : at;
+    // 마감만 적힌 문서(과목·블록·마감 세 줄)도 블록 정보를 받은 게 아니다 — 낡음 표시를 지우지 않는다.
+    const infoUpdatedAt =
+      item.infoFromDoc === false || !hasInfoField(patch) ? (current?.infoUpdatedAt ?? null) : at;
 
     blocks[item.id] = current
       ? { ...current, ...patch, infoUpdatedAt, updatedAt: at }
@@ -459,8 +466,26 @@ function applyBundlePlan(state, plan) {
   return { ...state, subjects, blocks, entries };
 }
 
+/**
+ * ---SUBJECT--- 로 받은 값 → 과목에 덮어쓸 항목. BLOCK 과 같은 규칙으로 **적힌 항목만** 바꾼다.
+ * undefined(빠진 항목)는 지금 값을 그대로 두고, '(지움)'/'없음' 으로 온 null/'' 은 비운다.
+ */
+function subjectPatchOf(p) {
+  const patch = {};
+  if (p.description !== undefined) patch.description = String(p.description ?? '');
+  if (p.diagramCode !== undefined) patch.diagramCode = normalizeDiagram(p.diagramCode);
+  if (p.svgCode !== undefined) patch.svgCode = normalizeSvg(p.svgCode);
+  if (p.deadline !== undefined) patch.deadline = normalizeDeadline(p.deadline);
+  return patch;
+}
+
 /** '블록 정보'에 해당하는 항목 — 갱신 시각(infoUpdatedAt)을 찍는 기준 */
 const INFO_FIELDS = ['description', 'progressPercent', 'diagramCode', 'svgCode'];
+
+/** 패치에 '블록 정보' 항목이 하나라도 실렸는지 */
+export function hasInfoField(patch) {
+  return INFO_FIELDS.some((key) => patch?.[key] !== undefined);
+}
 
 /** 필드가 없던 예전 데이터와 비교할 때의 기본값 (정규화 결과와 같은 모양) */
 function defaultInfo(key) {

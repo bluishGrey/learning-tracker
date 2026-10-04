@@ -92,13 +92,14 @@ export function planEntriesImport(state, docs, { subjectId, blockId }) {
   return done({ subjectId, subjectPatch: null, blocks, entries });
 }
 
-/** ---BLOCK--- 문서 값 → 블록에 덮어쓸 정보 (블록 정보 가져오기와 같은 네 항목) */
+/** ---BLOCK--- 문서 값 → 블록에 덮어쓸 정보 (블록 정보 가져오기와 같은 항목) */
 export function blockPatchOf(value) {
   return {
     description: value.description,
     progressPercent: value.progressPercent,
     diagramCode: value.diagramCode,
     svgCode: value.svgCode,
+    deadline: value.deadline,
   };
 }
 
@@ -136,6 +137,8 @@ export function planSubjectImport(state, docs, { subjectId }) {
         description: subjectDocs[0].value.description,
         diagramCode: subjectDocs[0].value.diagramCode,
         svgCode: subjectDocs[0].value.svgCode,
+        // 어느 항목이든 undefined(빠짐)면 reducer 가 지금 값을 그대로 둔다
+        deadline: subjectDocs[0].value.deadline,
       }
     : null;
 

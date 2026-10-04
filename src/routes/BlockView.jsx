@@ -21,6 +21,8 @@ import ManualCopySheet, { useTextExport } from '../components/ManualCopySheet.js
 import Sheet from '../components/Sheet.jsx';
 import BlockInfoDiff from '../components/BlockInfoDiff.jsx';
 import StaleBadge from '../components/StaleBadge.jsx';
+import DeadlineBadge from '../components/DeadlineBadge.jsx';
+import DeadlineField from '../components/DeadlineField.jsx';
 import NotFound from './NotFound.jsx';
 import {
   parseBlockText,
@@ -32,6 +34,7 @@ import {
 } from '../lib/structuredText.js';
 import { planEntriesImport, describePlan } from '../lib/importPlan.js';
 import { blockSyncWarnings } from '../lib/blockSync.js';
+import { hasInfoField } from '../state/reducer.js';
 
 /**
  * 경로 B의 세 번째 단계 — 블록 하나.
@@ -156,8 +159,10 @@ export default function BlockView() {
         progressPercent: value.progressPercent,
         diagramCode: value.diagramCode,
         svgCode: value.svgCode,
+        deadline: value.deadline,
       },
-      { markInfo: true }
+      // 마감만 적힌 문서는 블록 정보를 받은 게 아니므로 갱신 시각(낡음 표시)을 건드리지 않는다
+      { markInfo: hasInfoField(value) }
     );
     actions.setNotice({
       level: 'success',
@@ -177,7 +182,10 @@ export default function BlockView() {
 
       <StaleBadge subject={subject} block={block} />
 
-      <h1 className="page__title">{block.name || '(이름 없음)'}</h1>
+      <div className="subjecthead">
+        <h1 className="page__title">{block.name || '(이름 없음)'}</h1>
+        <DeadlineBadge deadline={block.deadline} done={block.isCompleted} />
+      </div>
       <p className="page__sub">
         {subject.name} · 기록 {entries.length}개 · {block.isCompleted ? '완료' : '진행 중'}
       </p>
@@ -217,7 +225,7 @@ export default function BlockView() {
         groups={[
           {
             label: '이 블록 정보',
-            hint: '설명 · 진행률 · 다이어그램 · SVG',
+            hint: '설명 · 진행률 · 마감 · 다이어그램 · SVG',
             actions: [
               { kind: 'export', label: '블록 정보 내보내기', onClick: exportBlockInfo },
               { kind: 'import', label: '블록 정보 가져오기', onClick: () => setImporting('info') },
@@ -321,7 +329,7 @@ export default function BlockView() {
         open={importing === 'info'}
         onClose={() => setImporting(null)}
         title="블록 정보 가져오기"
-        hint={`claude.ai 가 만들어 준 ---BLOCK--- 형식 텍스트를 그대로 붙여넣으세요. '${subject.name} / ${block.name}' 의 설명·진행률·다이어그램·SVG 중 적힌 항목을 덮어씁니다. 적히지 않은 항목은 그대로 두고, 지우려면 '(지움)' 이라고 적습니다.`}
+        hint={`claude.ai 가 만들어 준 ---BLOCK--- 형식 텍스트를 그대로 붙여넣으세요. '${subject.name} / ${block.name}' 의 설명·진행률·마감·다이어그램·SVG 중 적힌 항목을 덮어씁니다. (과목·블록 이름만 필수) 적히지 않은 항목은 그대로 두고, 지우려면 '(지움)' 이라고 적습니다. (마감은 '없음' 도 됩니다)`}
         placeholder={'---BLOCK---\n과목: ' + subject.name + '\n블록: ' + block.name + '\n\n설명:\n…\n---END---'}
         parse={readBlockInfo}
         applyLabel="블록 정보 갱신"
@@ -412,8 +420,9 @@ function BlockInfoPreview({ value }) {
   // 적히지 않은 항목(undefined)은 그대로 두고, '(지움)'으로 적힌 항목만 비운다
   const show = (v, fmt) => (v === undefined ? '그대로 (적히지 않음)' : v === null || v === '' ? '지움' : fmt(v));
   const rows = [
-    ['설명', `${value.description.split('\n').length}줄`],
+    ['설명', show(value.description, (v) => `${v.split('\n').length}줄`)],
     ['진행률', show(value.progressPercent, (v) => `${v}%`)],
+    ['마감', show(value.deadline, (v) => v)],
     ['다이어그램', show(value.diagramCode, (v) => `${v.split('\n').length}줄`)],
     ['SVG', show(value.svgCode, (v) => `${v.length}자`)],
   ];
@@ -475,6 +484,8 @@ function BlockSettings({ open, block, subjects, onClose, onSave, onRequestDelete
                 progressPercent: form.progressPercent.trim() === '' ? null : form.progressPercent,
                 diagramCode: form.diagramCode,
                 svgCode: form.svgCode,
+                // 빈칸은 '마감 없음'
+                deadline: form.deadline || null,
               })
             }
           >
@@ -537,6 +548,13 @@ function BlockSettings({ open, block, subjects, onClose, onSave, onRequestDelete
           자리입니다. (과목 진도율은 완료한 블록 수로 따로 계산됩니다)
         </p>
       </div>
+
+      <DeadlineField
+        id="block-edit-deadline"
+        value={form.deadline}
+        onChange={(deadline) => patch({ deadline })}
+        hint="지났는데 완료로 표시하지 않은 블록은 목록에서 빨갛게 표시됩니다."
+      />
 
       <div className="field">
         <label className="field__label" htmlFor="block-edit-desc">
@@ -620,5 +638,6 @@ function toForm(block) {
     progressPercent: block.progressPercent == null ? '' : String(block.progressPercent),
     diagramCode: block.diagramCode ?? '',
     svgCode: block.svgCode ?? '',
+    deadline: block.deadline ?? '',
   };
 }

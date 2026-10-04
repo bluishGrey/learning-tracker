@@ -42,6 +42,12 @@ export const END_MARKER = '---END---';
  */
 export const CLEAR_TOKEN = '(지움)';
 
+/**
+ * '마감' 항목에서 마감을 지우는 값. `마감: 없음` — 날짜 자리에 오는 말로는 '없음'이 가장 자연스럽다.
+ * 다른 항목과 같은 '(지움)' 도 똑같이 받는다.
+ */
+export const NO_DEADLINE_TOKEN = '없음';
+
 const K = {
   DATE: '날짜',
   SUBJECT: '과목',
@@ -54,10 +60,11 @@ const K = {
   DIAGRAM: '다이어그램',
   SVG: 'SVG',
   BLOCKLIST: '블록 목록',
+  DEADLINE: '마감',
 };
 
 /** 한 줄로 끝나는 값들. 나머지는 다음 키워드가 나올 때까지 여러 줄을 먹는다. */
-const SINGLE_LINE = new Set([K.DATE, K.SUBJECT, K.BLOCK, K.TITLE, K.TAGS, K.PROGRESS]);
+const SINGLE_LINE = new Set([K.DATE, K.SUBJECT, K.BLOCK, K.TITLE, K.TAGS, K.PROGRESS, K.DEADLINE]);
 
 const FORMS = {
   /**
@@ -66,14 +73,18 @@ const FORMS = {
    * 블록 목록만 따로 주고받을 이유가 없었다. claude.ai 쪽에서도 "이 과목은 이렇다"를
    * 한 문서로 정리해 보내는 편이 자연스럽다.
    *
-   * 블록 목록은 **선택**이다. 설명만 고치고 싶을 때 목록을 적지 않으면
-   * 블록은 하나도 건드리지 않는다.
+   * 과목 이름 말고는 전부 **선택**이고 BLOCK 과 같은 규칙이다 — **적힌 항목만 바뀌고
+   * 빠진 항목은 그대로 둔다.** 예전에는 설명이 필수였고 다이어그램·SVG 는 빠지면 지워졌다.
+   * 그래서 '과목 / 마감' 두 줄로 마감만 넣으려 해도 과목 그림이 지워졌다.
+   *   - 블록 목록이 없으면 블록을 하나도 건드리지 않는다.
+   *   - 다이어그램·SVG 는 '(지움)', 마감은 '없음'(또는 '(지움)')으로 지운다.
+   *   - 설명은 '(지움)' 을 받지 않는다 (아래 parseBody).
    */
   subject: {
     marker: SUBJECT_MARKER,
     label: '과목 정보',
-    fields: [K.SUBJECT, K.DESCRIPTION, K.BLOCKLIST, K.DIAGRAM, K.SVG],
-    required: [K.SUBJECT, K.DESCRIPTION],
+    fields: [K.SUBJECT, K.DEADLINE, K.DESCRIPTION, K.BLOCKLIST, K.DIAGRAM, K.SVG],
+    required: [K.SUBJECT],
   },
   entry: {
     marker: ENTRY_MARKER,
@@ -81,11 +92,15 @@ const FORMS = {
     fields: [K.DATE, K.SUBJECT, K.BLOCK, K.TITLE, K.TAGS, K.CONTENT, K.PROGRESS, K.DIAGRAM, K.SVG],
     required: [K.DATE, K.SUBJECT, K.BLOCK, K.CONTENT],
   },
+  /**
+   * 블록 정보. 과목·블록 이름만 필수고 나머지는 전부 '적은 항목만 바뀐다'.
+   * 설명도 선택이라 `과목 / 블록 / 마감` 세 줄만으로 마감만 바꿀 수 있다.
+   */
   block: {
     marker: BLOCK_MARKER,
     label: '블록 정보',
-    fields: [K.SUBJECT, K.BLOCK, K.DESCRIPTION, K.PROGRESS, K.DIAGRAM, K.SVG],
-    required: [K.SUBJECT, K.BLOCK, K.DESCRIPTION],
+    fields: [K.SUBJECT, K.BLOCK, K.DESCRIPTION, K.PROGRESS, K.DEADLINE, K.DIAGRAM, K.SVG],
+    required: [K.SUBJECT, K.BLOCK],
   },
 };
 
@@ -188,21 +203,7 @@ export function parseBlockText(text) {
   const parsed = parseStructured(text, 'block');
   if (!parsed.ok) return parsed;
 
-  const f = parsed.fields;
-  return {
-    ok: true,
-    value: {
-      subjectName: f[K.SUBJECT],
-      blockName: f[K.BLOCK],
-      description: f[K.DESCRIPTION],
-      // 없는 항목은 undefined(그대로 둠), '(지움)' 은 null/''(비움)
-      progressPercent: keepOrClear(f, K.PROGRESS, null),
-      diagramCode: keepOrClear(f, K.DIAGRAM, ''),
-      svgCode: keepOrClear(f, K.SVG, ''),
-    },
-    errors: [],
-    warnings: parsed.warnings,
-  };
+  return { ok: true, value: toValue('block', parsed.fields), errors: [], warnings: parsed.warnings };
 }
 
 /**
@@ -371,6 +372,16 @@ function parseBody(body, form) {
     fields[key] = value;
   }
 
+  // ─ 설명은 '(지움)' 으로 지우지 않는다 ─
+  // 설명은 블록·과목의 누적 요약이라, claude.ai 가 잘못 적은 한 줄에 통째로 사라지면 되살릴 수 없다.
+  // 그대로 받으면 '(지움)' 이라는 글자가 설명이 되므로 오류로 멈추고 설정 화면으로 안내한다.
+  if (typeof fields[K.DESCRIPTION] === 'string' && fields[K.DESCRIPTION].trim() === CLEAR_TOKEN) {
+    errors.push(
+      `설명은 '${CLEAR_TOKEN}' 으로 지울 수 없습니다. 설명을 지우려면 과목/블록 설정 화면에서 직접 지워주세요. (설명을 바꾸지 않으려면 '설명' 항목을 빼면 됩니다)`
+    );
+    return { ok: false, value: null, fields: null, errors, warnings };
+  }
+
   // ─ '(지움)' — 항목은 있되 값을 비운다 (아래 변환을 거치지 않게 먼저 걷어 둔다) ─
   const cleared = new Set();
   for (const key of [K.PROGRESS, K.DIAGRAM, K.SVG]) {
@@ -378,6 +389,10 @@ function parseBody(body, form) {
       cleared.add(key);
       delete fields[key];
     }
+  }
+  if (fields[K.DEADLINE] === NO_DEADLINE_TOKEN || fields[K.DEADLINE] === CLEAR_TOKEN) {
+    cleared.add(K.DEADLINE);
+    delete fields[K.DEADLINE];
   }
 
   // ─ 필수 항목 ─
@@ -392,6 +407,13 @@ function parseBody(body, form) {
   if (Object.hasOwn(fields, K.DATE) && !isValidDateKey(fields[K.DATE])) {
     errors.push(
       `날짜 형식이 올바르지 않습니다: "${fields[K.DATE]}" (YYYY-MM-DD 로 적어주세요)`
+    );
+  }
+
+  // 한 줄 값이라 앞뒤 공백은 위에서 이미 걷혔다 ("마감:  2026-10-31 " → "2026-10-31")
+  if (Object.hasOwn(fields, K.DEADLINE) && !isValidDateKey(fields[K.DEADLINE])) {
+    errors.push(
+      `마감 형식이 올바르지 않습니다: "${fields[K.DEADLINE]}" (YYYY-MM-DD 로 적어주세요. 마감을 지우려면 '${NO_DEADLINE_TOKEN}')`
     );
   }
 
@@ -483,23 +505,26 @@ function toValue(kind, f) {
   if (kind === 'subject') {
     return {
       subjectName: f[K.SUBJECT],
+      // BLOCK 과 같은 규칙: 없는 항목은 undefined(그대로 둠), '(지움)' 은 null/''(비움)
       description: f[K.DESCRIPTION],
       // 목록 줄이 아예 없으면 null — '빈 목록'과 구분해야 한다.
       // null 이면 블록을 건드리지 않고, 빈 배열이면 "적었는데 하나도 못 읽었다"는 뜻이다.
       blockNames: Object.hasOwn(f, K.BLOCKLIST) ? splitBlockNames(f[K.BLOCKLIST]) : null,
-      diagramCode: f[K.DIAGRAM] ?? '',
-      svgCode: f[K.SVG] ?? '',
+      diagramCode: keepOrClear(f, K.DIAGRAM, ''),
+      svgCode: keepOrClear(f, K.SVG, ''),
+      deadline: keepOrClear(f, K.DEADLINE, null),
     };
   }
   if (kind === 'block') {
     return {
       subjectName: f[K.SUBJECT],
       blockName: f[K.BLOCK],
+      // 없는 항목은 undefined(그대로 둠), '(지움)' 은 null/''(비움). 설명은 '(지움)' 을 받지 않는다
       description: f[K.DESCRIPTION],
-      // 없는 항목은 undefined(그대로 둠), '(지움)' 은 null/''(비움)
       progressPercent: keepOrClear(f, K.PROGRESS, null),
       diagramCode: keepOrClear(f, K.DIAGRAM, ''),
       svgCode: keepOrClear(f, K.SVG, ''),
+      deadline: keepOrClear(f, K.DEADLINE, null),
     };
   }
   return {
@@ -515,7 +540,7 @@ function toValue(kind, f) {
   };
 }
 
-/** 블록 정보 항목: 없으면 undefined(그대로 둠), '(지움)'이면 cleared 값, 아니면 그 값 */
+/** 과목·블록 정보 항목: 없으면 undefined(그대로 둠), '(지움)'이면 cleared 값, 아니면 그 값 */
 function keepOrClear(f, key, cleared) {
   if (!Object.hasOwn(f, key)) return undefined;
   return f[key] === null ? cleared : f[key];
@@ -722,6 +747,7 @@ export function buildSubjectInfoText(subject, blocks = []) {
 function subjectRows(subject, blocks) {
   return [
     [K.SUBJECT, subject?.name],
+    [K.DEADLINE, deadlineOf(subject)],
     [K.DESCRIPTION, subject?.description, 'block'],
     [K.BLOCKLIST, blocks.map((b) => b.name).join('\n'), 'block'],
     [K.DIAGRAM, subject?.diagramCode, 'fence'],
@@ -777,9 +803,15 @@ function blockRows(subject, block) {
     [K.BLOCK, block?.name],
     [K.DESCRIPTION, block?.description, 'block'],
     [K.PROGRESS, block?.progressPercent],
+    [K.DEADLINE, deadlineOf(block)],
     [K.DIAGRAM, block?.diagramCode, 'fence'],
     [K.SVG, block?.svgCode, 'block'],
   ];
+}
+
+/** 내보낼 마감 — 읽을 수 없는 값은 내보내지 않는다 (되붙였을 때 오류가 나지 않게) */
+function deadlineOf(unit) {
+  return isValidDateKey(unit?.deadline) ? unit.deadline : null;
 }
 
 function entryRows(subject, block, entry) {
@@ -855,6 +887,7 @@ export function summarizeSelfInfo(unit) {
   const parts = [];
   if (String(unit?.description ?? '').trim()) parts.push('설명');
   if (unit?.progressPercent != null) parts.push('진행률');
+  if (isValidDateKey(unit?.deadline)) parts.push('마감');
   if (String(unit?.diagramCode ?? '').trim()) parts.push('다이어그램');
   if (String(unit?.svgCode ?? '').trim()) parts.push('SVG');
   return parts.length > 0 ? parts.join(' · ') : '아직 채운 항목 없음';

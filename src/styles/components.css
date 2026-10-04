@@ -598,6 +598,48 @@
   color: var(--warn);
 }
 
+/* ─── 마감 D-day ───────────────────────────────────────── */
+
+/*
+ * 평소에는 무채색 알약. 지났는데 끝나지 않은 것만 --danger 로 칠한다.
+ * 테라코타(--accent)는 버튼·포인트 색이라 여기에 쓰지 않는다 — 경고와 강조가 섞이면
+ * 어느 쪽도 눈에 띄지 않는다. 과목 색(활성도 투명도)과도 겹치지 않게 과목 색은 쓰지 않는다.
+ */
+.deadline {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.deadline--overdue {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.deadline--past {
+  border-style: dashed;
+  color: var(--text-faint);
+}
+
+.deadlinefield .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.deadlinefield .btn {
+  flex: none;
+}
+
 .subjecthead {
   display: flex;
   align-items: center;
