@@ -1,4 +1,5 @@
 import { normalizeDeadline, normalizeDiagram, normalizePercent, normalizeSvg } from '../storage/schema.js';
+import { hasInfoField } from '../state/reducer.js';
 
 /**
  * 블록 정보가 어떻게 바뀌는지 — 기록 가져오기에 ---BLOCK--- 가 함께 들어왔을 때 보여준다.
@@ -38,7 +39,9 @@ export default function BlockInfoDiff({ block, patch }) {
             <p className="field__hint">같은 텍스트에 블록 정보(---BLOCK---)가 함께 들어 있습니다.</p>
           </>
         ) : (
-          <strong>블록 정보는 지금과 같습니다. 갱신 시각만 새로 기록합니다.</strong>
+          <strong>
+            블록 정보는 지금과 같습니다.{hasInfoField(patch) ? ' 갱신 시각만 새로 기록합니다.' : ''}
+          </strong>
         )}
       </div>
       <dl className="paste__preview">

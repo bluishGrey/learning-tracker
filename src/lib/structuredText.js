@@ -77,12 +77,15 @@ const FORMS = {
    * 블록은 하나도 건드리지 않는다.
    *
    * 마감도 **선택**이고 BLOCK 과 같은 규칙이다 — 적지 않으면 그대로, '없음'이면 지운다.
+   *
+   * 설명도 **선택**이다. 적지 않으면 지금 설명을 그대로 둔다. 예전에는 필수였는데,
+   * 설명이 빈 과목을 내보내면 '설명:' 줄이 빠져서 되붙일 수 없었다.
    */
   subject: {
     marker: SUBJECT_MARKER,
     label: '과목 정보',
     fields: [K.SUBJECT, K.DEADLINE, K.DESCRIPTION, K.BLOCKLIST, K.DIAGRAM, K.SVG],
-    required: [K.SUBJECT, K.DESCRIPTION],
+    required: [K.SUBJECT],
   },
   entry: {
     marker: ENTRY_MARKER,
@@ -90,11 +93,15 @@ const FORMS = {
     fields: [K.DATE, K.SUBJECT, K.BLOCK, K.TITLE, K.TAGS, K.CONTENT, K.PROGRESS, K.DIAGRAM, K.SVG],
     required: [K.DATE, K.SUBJECT, K.BLOCK, K.CONTENT],
   },
+  /**
+   * 블록 정보. 과목·블록 이름만 필수고 나머지는 전부 '적은 항목만 바뀐다'.
+   * 설명도 선택이라 `과목 / 블록 / 마감` 세 줄만으로 마감만 바꿀 수 있다.
+   */
   block: {
     marker: BLOCK_MARKER,
     label: '블록 정보',
     fields: [K.SUBJECT, K.BLOCK, K.DESCRIPTION, K.PROGRESS, K.DEADLINE, K.DIAGRAM, K.SVG],
-    required: [K.SUBJECT, K.BLOCK, K.DESCRIPTION],
+    required: [K.SUBJECT, K.BLOCK],
   },
 };
 
@@ -489,6 +496,7 @@ function toValue(kind, f) {
   if (kind === 'subject') {
     return {
       subjectName: f[K.SUBJECT],
+      // 적지 않으면 undefined(그대로 둠)
       description: f[K.DESCRIPTION],
       // 목록 줄이 아예 없으면 null — '빈 목록'과 구분해야 한다.
       // null 이면 블록을 건드리지 않고, 빈 배열이면 "적었는데 하나도 못 읽었다"는 뜻이다.
@@ -503,8 +511,8 @@ function toValue(kind, f) {
     return {
       subjectName: f[K.SUBJECT],
       blockName: f[K.BLOCK],
+      // 없는 항목은 undefined(그대로 둠), '(지움)' 은 null/''(비움). 설명은 '(지움)' 을 받지 않는다
       description: f[K.DESCRIPTION],
-      // 없는 항목은 undefined(그대로 둠), '(지움)' 은 null/''(비움)
       progressPercent: keepOrClear(f, K.PROGRESS, null),
       diagramCode: keepOrClear(f, K.DIAGRAM, ''),
       svgCode: keepOrClear(f, K.SVG, ''),

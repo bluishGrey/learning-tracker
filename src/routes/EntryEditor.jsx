@@ -14,6 +14,7 @@ import { deriveTitleFromContent, entryTitle } from '../lib/entryTitle.js';
 import { parseEntryText, resolveTarget } from '../lib/structuredText.js';
 import { blockPatchOf } from '../lib/importPlan.js';
 import { blockSyncWarnings } from '../lib/blockSync.js';
+import { hasInfoField } from '../state/reducer.js';
 
 /**
  * 기록 작성 / 수정.
@@ -212,7 +213,9 @@ export default function EntryEditor() {
     };
 
     if (pendingBlockInfo && state.blocks[pendingBlockInfo.blockId]) {
-      actions.updateBlock(pendingBlockInfo.blockId, pendingBlockInfo.patch, { markInfo: true });
+      actions.updateBlock(pendingBlockInfo.blockId, pendingBlockInfo.patch, {
+        markInfo: hasInfoField(pendingBlockInfo.patch),
+      });
     }
 
     if (isEdit) {

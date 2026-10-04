@@ -398,10 +398,12 @@ function applyBundlePlan(state, plan) {
         ...state.subjects,
         [plan.subjectId]: {
           ...subject,
-          description: String(plan.subjectPatch.description ?? ''),
+          // 설명·마감은 적힌 경우에만 바꾼다 (빠지면 그대로). 다이어그램·SVG 는 예전처럼 통째로 덮어쓴다
+          ...(plan.subjectPatch.description !== undefined && {
+            description: String(plan.subjectPatch.description ?? ''),
+          }),
           diagramCode: normalizeDiagram(plan.subjectPatch.diagramCode),
           svgCode: normalizeSvg(plan.subjectPatch.svgCode),
-          // 마감은 적힌 경우에만 바꾼다 (빠지면 그대로, '없음'이면 null)
           ...(plan.subjectPatch.deadline !== undefined && {
             deadline: normalizeDeadline(plan.subjectPatch.deadline),
           }),
@@ -427,7 +429,9 @@ function applyBundlePlan(state, plan) {
 
     // ---BLOCK--- 문서로 받은 정보면 갱신 시각을 찍는다. 과목 정보의 '블록 목록'으로
     // 이름만 만든 뼈대(infoFromDoc === false)는 정보를 받은 게 아니므로 '모름'으로 둔다.
-    const infoUpdatedAt = item.infoFromDoc === false ? (current?.infoUpdatedAt ?? null) : at;
+    // 마감만 적힌 문서(과목·블록·마감 세 줄)도 블록 정보를 받은 게 아니다 — 낡음 표시를 지우지 않는다.
+    const infoUpdatedAt =
+      item.infoFromDoc === false || !hasInfoField(patch) ? (current?.infoUpdatedAt ?? null) : at;
 
     blocks[item.id] = current
       ? { ...current, ...patch, infoUpdatedAt, updatedAt: at }
@@ -472,6 +476,11 @@ function applyBundlePlan(state, plan) {
 
 /** '블록 정보'에 해당하는 항목 — 갱신 시각(infoUpdatedAt)을 찍는 기준 */
 const INFO_FIELDS = ['description', 'progressPercent', 'diagramCode', 'svgCode'];
+
+/** 패치에 '블록 정보' 항목이 하나라도 실렸는지 */
+export function hasInfoField(patch) {
+  return INFO_FIELDS.some((key) => patch?.[key] !== undefined);
+}
 
 /** 필드가 없던 예전 데이터와 비교할 때의 기본값 (정규화 결과와 같은 모양) */
 function defaultInfo(key) {
