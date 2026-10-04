@@ -660,6 +660,13 @@
   color: var(--danger);
 }
 
+/* 사이드바처럼 좁은 줄용 — 블록 이름이 먼저 줄어들고(…) 배지는 다 보이게 */
+.deadline--compact {
+  padding: 0 5px;
+  font-size: 0.64rem;
+  line-height: 1.45;
+}
+
 .deadline--past {
   border-style: dashed;
   color: var(--text-faint);

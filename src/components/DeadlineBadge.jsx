@@ -9,8 +9,10 @@ import { deadlineInfo, formatFullDate } from '../lib/date.js';
  *
  * 경고색은 --danger 다. 테라코타 포인트(--accent, hue 15°)와 헷갈리지 않게 따로 둔
  * 붉은색이고, 색만으로 구분하지 않도록 '(지남)' 글자와 테두리가 함께 붙는다.
+ *
+ * compact — 사이드바처럼 좁은 줄에 넣을 때. 글자·여백만 줄이고 규칙은 같다.
  */
-export default function DeadlineBadge({ deadline, done = false }) {
+export default function DeadlineBadge({ deadline, done = false, compact = false }) {
   const info = deadlineInfo(deadline);
   if (!info) return null;
 
@@ -18,7 +20,7 @@ export default function DeadlineBadge({ deadline, done = false }) {
   const title = `마감 ${formatFullDate(deadline)}${info.overdue && !done ? ' — 지났는데 아직 완료되지 않음' : ''}`;
 
   return (
-    <span className={`deadline${tone}`} title={title}>
+    <span className={`deadline${tone}${compact ? ' deadline--compact' : ''}`} title={title}>
       {info.label}
     </span>
   );
