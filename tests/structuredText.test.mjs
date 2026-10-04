@@ -228,6 +228,116 @@ describe('설명은 선택 항목', () => {
   });
 });
 
+// ─── SUBJECT: 빠진 항목은 그대로 ─────────────────────────
+
+describe('SUBJECT 는 적힌 항목만 바꾼다', () => {
+  /** 설명·다이어그램·SVG·마감이 모두 채워진 과목 */
+  function richSubject() {
+    let s = seed();
+    s = reducer(s, {
+      type: ACTIONS.SUBJECT_UPDATE,
+      id: 'S',
+      patch: { diagramCode: 'graph TD\n A-->B', svgCode: '<svg viewBox="0 0 1 1"></svg>', deadline: '2026-12-01' },
+    });
+    return s;
+  }
+  const keep = ['description', 'diagramCode', 'svgCode', 'name', 'colorHue', 'customColor'];
+
+  it('[사용 사례] 과목 / 마감 두 줄로 마감만 넣어도 설명·다이어그램·SVG 가 남는다', () => {
+    const s = richSubject();
+    const { state, planned } = importSubject(s, SUBJECT(['과목: 수학', '마감: 2026-12-20']));
+    assert.equal(state.subjects.S.deadline, '2026-12-20');
+    for (const key of keep) assert.deepEqual(state.subjects.S[key], s.subjects.S[key], `subject.${key} 가 바뀌었다`);
+    assert.equal(state.subjects.S.diagramCode, 'graph TD\n A-->B');
+    assert.equal(state.subjects.S.svgCode, '<svg viewBox="0 0 1 1"></svg>');
+    // 블록 목록이 없으니 블록도 그대로
+    assert.equal(planned.summary.blocksAdded, 0);
+    assert.equal(planned.summary.blocksUpdated, 0);
+    assert.deepEqual(state.blocks, s.blocks);
+  });
+
+  it('과목 이름 한 줄뿐이면 마감까지 아무것도 바뀌지 않는다', () => {
+    const s = richSubject();
+    const { state } = importSubject(s, SUBJECT(['과목: 수학']));
+    for (const key of [...keep, 'deadline']) assert.deepEqual(state.subjects.S[key], s.subjects.S[key]);
+  });
+
+  it("다이어그램: (지움) 은 다이어그램만 비우고, 적히지 않은 SVG·설명은 남긴다", () => {
+    const s = richSubject();
+    const { state } = importSubject(s, SUBJECT(['과목: 수학', '다이어그램: (지움)']));
+    assert.equal(state.subjects.S.diagramCode, null);
+    assert.equal(state.subjects.S.svgCode, s.subjects.S.svgCode);
+    assert.equal(state.subjects.S.description, '과목 설명');
+  });
+
+  it('SVG: (지움) 은 SVG 만 비운다', () => {
+    const s = richSubject();
+    const { state } = importSubject(s, SUBJECT(['과목: 수학', 'SVG: (지움)']));
+    assert.equal(state.subjects.S.svgCode, null);
+    assert.equal(state.subjects.S.diagramCode, s.subjects.S.diagramCode);
+  });
+
+  it('적힌 항목은 예전처럼 덮어쓴다 (설명·다이어그램·SVG)', () => {
+    const s = richSubject();
+    const text = SUBJECT(['과목: 수학', '설명:', '새 설명', '다이어그램:', '```mermaid', 'graph LR', ' X-->Y', '```', 'SVG:', '<svg></svg>']);
+    const { state } = importSubject(s, text);
+    assert.equal(state.subjects.S.description, '새 설명');
+    assert.equal(state.subjects.S.diagramCode, 'graph LR\n X-->Y');
+    assert.equal(state.subjects.S.svgCode, '<svg></svg>');
+    assert.equal(state.subjects.S.deadline, '2026-12-01');
+  });
+
+  it('블록 목록을 적으면 없는 이름만 만든다 (기존 블록은 건드리지 않음)', () => {
+    const s = richSubject();
+    const { state, planned } = importSubject(s, SUBJECT(['과목: 수학', '블록 목록:', '1주차', '3주차']));
+    assert.equal(planned.summary.blocksAdded, 1);
+    assert.deepEqual(planned.summary.skipped, ['1주차']);
+    assert.deepEqual(state.blocks.B1, s.blocks.B1);
+    assert.equal(state.subjects.S.diagramCode, s.subjects.S.diagramCode);
+  });
+});
+
+// ─── 설명: (지움) 거부 ────────────────────────────────────
+
+describe("설명: (지움) 은 오류로 거부한다", () => {
+  const MSG = /설명을 지우려면 과목\/블록 설정 화면에서 직접 지워주세요/;
+
+  it('BLOCK·SUBJECT 둘 다, 한 줄·여러 줄·공백 섞인 모양 모두', () => {
+    const shapes = [['설명: (지움)'], ['설명:', '(지움)'], ['설명:   (지움)   '], ['설명:', '', '(지움)', '']];
+    for (const shape of shapes) {
+      const b = st.parseBlockText(BLOCK(['과목: 수학', '블록: 1주차', ...shape]));
+      assert.equal(b.ok, false, JSON.stringify(shape));
+      assert.match(b.errors[0], MSG);
+      const sj = st.parseSubjectText(SUBJECT(['과목: 수학', ...shape]));
+      assert.equal(sj.ok, false, JSON.stringify(shape));
+      assert.match(sj.errors[0], MSG);
+    }
+  });
+
+  it('여러 문서 중 하나라도 그러면 줄 번호를 붙여 전부 멈추고 아무것도 바뀌지 않는다', () => {
+    const r = st.parseDocuments(
+      `${BLOCK(['과목: 수학', '블록: 1주차', '마감: 2026-10-31'])}\n${BLOCK(['과목: 수학', '블록: 2주차', '설명: (지움)'])}`
+    );
+    assert.equal(r.ok, false);
+    assert.match(r.errors[0], /^---BLOCK--- \(6번째 줄\): /);
+    assert.match(r.errors[0], MSG);
+  });
+
+  it("설명 문장 속의 '(지움)' 은 그대로 설명이다", () => {
+    const b = st.parseBlockText(BLOCK(['과목: 수학', '블록: 1주차', '설명:', '다이어그램은 (지움) 으로 지운다']));
+    assert.ok(b.ok);
+    assert.equal(b.value.description, '다이어그램은 (지움) 으로 지운다');
+  });
+
+  it('다른 항목의 (지움) 은 예전처럼 지운다', () => {
+    const b = st.parseBlockText(BLOCK(['과목: 수학', '블록: 1주차', '진행률: (지움)', '다이어그램: (지움)', 'SVG: (지움)']));
+    assert.ok(b.ok);
+    assert.equal(b.value.progressPercent, null);
+    assert.equal(b.value.diagramCode, '');
+    assert.equal(b.value.svgCode, '');
+  });
+});
+
 // ─── 왕복 ─────────────────────────────────────────────────
 
 describe('내보내기 → 가져오기 왕복', () => {

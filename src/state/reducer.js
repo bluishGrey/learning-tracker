@@ -398,15 +398,7 @@ function applyBundlePlan(state, plan) {
         ...state.subjects,
         [plan.subjectId]: {
           ...subject,
-          // 설명·마감은 적힌 경우에만 바꾼다 (빠지면 그대로). 다이어그램·SVG 는 예전처럼 통째로 덮어쓴다
-          ...(plan.subjectPatch.description !== undefined && {
-            description: String(plan.subjectPatch.description ?? ''),
-          }),
-          diagramCode: normalizeDiagram(plan.subjectPatch.diagramCode),
-          svgCode: normalizeSvg(plan.subjectPatch.svgCode),
-          ...(plan.subjectPatch.deadline !== undefined && {
-            deadline: normalizeDeadline(plan.subjectPatch.deadline),
-          }),
+          ...subjectPatchOf(plan.subjectPatch),
           updatedAt: at,
         },
       }
@@ -472,6 +464,19 @@ function applyBundlePlan(state, plan) {
   }
 
   return { ...state, subjects, blocks, entries };
+}
+
+/**
+ * ---SUBJECT--- 로 받은 값 → 과목에 덮어쓸 항목. BLOCK 과 같은 규칙으로 **적힌 항목만** 바꾼다.
+ * undefined(빠진 항목)는 지금 값을 그대로 두고, '(지움)'/'없음' 으로 온 null/'' 은 비운다.
+ */
+function subjectPatchOf(p) {
+  const patch = {};
+  if (p.description !== undefined) patch.description = String(p.description ?? '');
+  if (p.diagramCode !== undefined) patch.diagramCode = normalizeDiagram(p.diagramCode);
+  if (p.svgCode !== undefined) patch.svgCode = normalizeSvg(p.svgCode);
+  if (p.deadline !== undefined) patch.deadline = normalizeDeadline(p.deadline);
+  return patch;
 }
 
 /** '블록 정보'에 해당하는 항목 — 갱신 시각(infoUpdatedAt)을 찍는 기준 */

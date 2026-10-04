@@ -281,7 +281,7 @@ export default function SubjectView() {
         open={importing === 'info'}
         onClose={() => setImporting(null)}
         title="과목 정보 가져오기"
-        hint={`claude.ai 가 만들어 준 ---SUBJECT--- 형식 텍스트를 붙여넣으세요. '${subject.name}' 의 다이어그램·SVG 를 덮어쓰고, '블록 목록' 이 적혀 있으면 없는 블록을 만듭니다. (이미 있는 이름은 건드리지 않습니다) '설명'·'마감' 은 적혀 있을 때만 바꾸고, '마감: 없음' 이면 마감을 지웁니다.`}
+        hint={`claude.ai 가 만들어 준 ---SUBJECT--- 형식 텍스트를 붙여넣으세요. '${subject.name}' 의 설명·마감·다이어그램·SVG 중 적힌 항목만 바꾸고, 적히지 않은 항목은 그대로 둡니다. '블록 목록' 이 적혀 있으면 없는 블록을 만듭니다. (이미 있는 이름은 건드리지 않습니다) 다이어그램·SVG 는 '(지움)', 마감은 '없음' 으로 지웁니다.`}
         placeholder={`---SUBJECT---\n과목: ${subject.name}\n\n설명:\n…\n\n블록 목록:\n1주차\n2주차\n---END---`}
         parse={readInfo}
         applyLabel="과목 정보 갱신"

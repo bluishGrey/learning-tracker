@@ -137,7 +137,7 @@ export function planSubjectImport(state, docs, { subjectId }) {
         description: subjectDocs[0].value.description,
         diagramCode: subjectDocs[0].value.diagramCode,
         svgCode: subjectDocs[0].value.svgCode,
-        // undefined 면 reducer 가 지금 마감을 그대로 둔다
+        // 어느 항목이든 undefined(빠짐)면 reducer 가 지금 값을 그대로 둔다
         deadline: subjectDocs[0].value.deadline,
       }
     : null;
