@@ -413,6 +413,34 @@
   color: var(--accent);
 }
 
+/*
+ * 마감 깃발 — 칸 오른쪽 위. 평소엔 흐린 글자색, 지났는데 끝나지 않은 것이 있으면 --danger,
+ * 전부 끝났으면 더 흐리게. 과목 색은 쓰지 않는다 (한 칸에 여러 과목의 마감이 겹칠 수 있다).
+ * 칸 링크(z-index 0) 위에 올려 마우스를 올리면 title 이 뜨게 한다. 누르는 자리를 조금 넓힌다.
+ */
+.calendar__flag {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  z-index: 1;
+  padding: 3px 5px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-dim);
+  text-decoration: none;
+  cursor: help;
+}
+
+.calendar__flag--overdue {
+  color: var(--danger);
+}
+
+.calendar__flag--done {
+  color: var(--text-faint);
+  opacity: 0.7;
+}
+
 /* 아주 좁은 화면 — 글자가 몇 자라도 더 들어가도록 여백·옆선을 걷고 글자를 줄인다 (점은 남긴다) */
 @media (max-width: 480px) {
   .calendar__day {
@@ -425,6 +453,12 @@
     padding: 0 2px;
     border-left: none;
     font-size: 0.58rem;
+  }
+
+  /* 칸이 좁아 두 자리 날짜와 붙지 않게 깃발을 줄인다 */
+  .calendar__flag {
+    padding: 2px 3px;
+    font-size: 0.62rem;
   }
 }
 
@@ -2402,4 +2436,95 @@
 .daily__badge--update {
   background: var(--surface-3);
   color: var(--text-dim);
+}
+
+/* ─── 마감 모아 보기 (홈 '마감 일정' · 그날 화면 '이 날 마감') ─── */
+
+.dlgroup + .dlgroup {
+  margin-top: var(--sp-3);
+}
+
+.dlgroup__title {
+  margin-bottom: var(--sp-1);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-faint);
+}
+
+.dlgroup--overdue .dlgroup__title {
+  color: var(--danger);
+}
+
+.dllist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
+  padding: 0;
+}
+
+.dlrow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--tap);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.dlrow:hover {
+  border-color: var(--border-strong);
+}
+
+.dlrow--overdue {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+}
+
+.dlrow--done .dlrow__name {
+  color: var(--text-dim);
+  text-decoration: line-through;
+  text-decoration-color: var(--text-faint);
+}
+
+/* 배지 폭을 맞춰 이름 줄이 세로로 가지런하게 — 'D+12(지남)' 까지 들어가는 폭 */
+.dlrow__badge {
+  flex: none;
+  min-width: 84px;
+  display: flex;
+}
+
+.dlrow__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dlrow__name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dlrow__meta {
+  font-size: 0.74rem;
+  color: var(--text-faint);
+}
+
+.dlrow__date {
+  flex: none;
+  font-size: 0.74rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.dlmore {
+  display: block;
+  margin: var(--sp-2) 0 0 auto;
 }

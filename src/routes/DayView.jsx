@@ -1,8 +1,9 @@
 import { Link, useParams } from 'react-router-dom';
 import { useStore } from '../state/StoreContext.jsx';
-import { selectEntriesOfDate } from '../state/selectors.js';
+import { selectEntriesOfDate, selectDeadlineItems } from '../state/selectors.js';
 import Breadcrumb from '../components/Breadcrumb.jsx';
 import EntryRow from '../components/EntryRow.jsx';
+import DeadlineRow from '../components/DeadlineRow.jsx';
 import NotFound from './NotFound.jsx';
 import {
   isValidDateKey,
@@ -22,6 +23,8 @@ export default function DayView() {
   if (!isValidDateKey(dateKey)) return <NotFound />;
 
   const entries = selectEntriesOfDate(index, dateKey);
+  // 캘린더의 ⚑ 를 누르고 들어왔을 때 '무엇의 마감인지'를 여기서 본다. 끝난 것도 함께 (흐리게) 보여준다.
+  const deadlines = selectDeadlineItems(state, index).filter((item) => item.deadline === dateKey);
   const monthKey = monthKeyOf(dateKey);
 
   return (
@@ -37,6 +40,7 @@ export default function DayView() {
       <h1 className="page__title">{formatFullDate(dateKey)}</h1>
       <p className="page__sub">
         {formatRelativeDay(dateKey)} · 기록 {entries.length}개
+        {deadlines.length > 0 && ` · 마감 ${deadlines.length}개`}
       </p>
 
       <div className="daynav">
@@ -51,7 +55,27 @@ export default function DayView() {
         </Link>
       </div>
 
+      {deadlines.length > 0 && (
+        <section className="section" aria-label="이 날 마감">
+          <div className="section__head">
+            <h2 className="section__title">이 날 마감</h2>
+          </div>
+          <ul className="dllist">
+            {deadlines.map((item) => (
+              <li key={item.key}>
+                <DeadlineRow item={item} showDate={false} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <section className="section">
+        {deadlines.length > 0 && (
+          <div className="section__head">
+            <h2 className="section__title">기록</h2>
+          </div>
+        )}
         {entries.length === 0 ? (
           <div className="empty">이 날짜에는 기록이 없습니다.</div>
         ) : (

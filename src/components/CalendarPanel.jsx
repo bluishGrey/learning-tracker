@@ -1,7 +1,12 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useStore } from '../state/StoreContext.jsx';
-import { selectSubjectsOnDate, selectCalendarLabels } from '../state/selectors.js';
+import {
+  selectSubjectsOnDate,
+  selectCalendarLabels,
+  selectDeadlineItems,
+  groupDeadlinesByDate,
+} from '../state/selectors.js';
 import CalendarGrid from './CalendarGrid.jsx';
 import SubjectDot from './SubjectDot.jsx';
 import { addMonths, formatMonthLabel, monthKeyOf, todayKey } from '../lib/date.js';
@@ -22,6 +27,13 @@ export default function CalendarPanel({ monthKey }) {
     (dateKey) => selectCalendarLabels(state, index, dateKey),
     [state, index]
   );
+
+  // 마감 깃발 — 날짜별로 한 번 묶어 두고 칸마다 꺼내 쓴다
+  const deadlinesByDate = useMemo(
+    () => groupDeadlinesByDate(selectDeadlineItems(state, index, todayKey())),
+    [state, index]
+  );
+  const deadlinesOnDate = useCallback((dateKey) => deadlinesByDate.get(dateKey) ?? [], [deadlinesByDate]);
 
   const thisMonth = monthKeyOf(todayKey());
 
@@ -60,7 +72,7 @@ export default function CalendarPanel({ monthKey }) {
         </Link>
       )}
 
-      <CalendarGrid monthKey={monthKey} labelsOnDate={labelsOnDate} />
+      <CalendarGrid monthKey={monthKey} labelsOnDate={labelsOnDate} deadlinesOnDate={deadlinesOnDate} />
 
       {monthSubjects.size > 0 && (
         <section className="section">

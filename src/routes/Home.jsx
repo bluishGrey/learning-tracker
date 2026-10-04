@@ -10,6 +10,7 @@ import CalendarPanel from '../components/CalendarPanel.jsx';
 import SubjectDot from '../components/SubjectDot.jsx';
 import YearGantt from '../components/YearGantt.jsx';
 import ReviewCard from '../components/ReviewCard.jsx';
+import DeadlineSection from '../components/DeadlineSection.jsx';
 import { useOpenDailyImport } from '../components/DailyImport.jsx';
 import { todayKey, monthKeyOf, formatFullDate, parseDateKey } from '../lib/date.js';
 
@@ -69,6 +70,9 @@ export default function Home() {
       <ReviewCard />
 
       <CalendarPanel monthKey={monthKeyOf(today)} />
+
+      {/* 마감이 하나도 없으면 스스로 숨는다 */}
+      <DeadlineSection />
 
       {years.length > 0 && (
         <section className="section">
