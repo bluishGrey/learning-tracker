@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
 import SubjectDot from './SubjectDot.jsx';
 import ProgressBar from './ProgressBar.jsx';
+import DeadlineBadge from './DeadlineBadge.jsx';
+import { isProgressDone } from '../state/selectors.js';
 import { formatRelativeDay } from '../lib/date.js';
 
 /**
@@ -18,6 +20,7 @@ export default function SubjectCard({ row }) {
         <SubjectDot subject={subject} alpha={alpha} size={12} />
         <span className="card__title">{subject.name || '(이름 없음)'}</span>
         <div className="spacer" />
+        <DeadlineBadge deadline={subject.deadline} done={isProgressDone(progress)} />
         <span className="subjectcard__percent">
           {progress.hasTarget ? `${progress.percent}%` : '—'}
         </span>

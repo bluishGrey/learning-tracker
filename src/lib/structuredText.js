@@ -42,6 +42,12 @@ export const END_MARKER = '---END---';
  */
 export const CLEAR_TOKEN = '(지움)';
 
+/**
+ * '마감' 항목에서 마감을 지우는 값. `마감: 없음` — 날짜 자리에 오는 말로는 '없음'이 가장 자연스럽다.
+ * 다른 항목과 같은 '(지움)' 도 똑같이 받는다.
+ */
+export const NO_DEADLINE_TOKEN = '없음';
+
 const K = {
   DATE: '날짜',
   SUBJECT: '과목',
@@ -54,10 +60,11 @@ const K = {
   DIAGRAM: '다이어그램',
   SVG: 'SVG',
   BLOCKLIST: '블록 목록',
+  DEADLINE: '마감',
 };
 
 /** 한 줄로 끝나는 값들. 나머지는 다음 키워드가 나올 때까지 여러 줄을 먹는다. */
-const SINGLE_LINE = new Set([K.DATE, K.SUBJECT, K.BLOCK, K.TITLE, K.TAGS, K.PROGRESS]);
+const SINGLE_LINE = new Set([K.DATE, K.SUBJECT, K.BLOCK, K.TITLE, K.TAGS, K.PROGRESS, K.DEADLINE]);
 
 const FORMS = {
   /**
@@ -68,11 +75,13 @@ const FORMS = {
    *
    * 블록 목록은 **선택**이다. 설명만 고치고 싶을 때 목록을 적지 않으면
    * 블록은 하나도 건드리지 않는다.
+   *
+   * 마감도 **선택**이고 BLOCK 과 같은 규칙이다 — 적지 않으면 그대로, '없음'이면 지운다.
    */
   subject: {
     marker: SUBJECT_MARKER,
     label: '과목 정보',
-    fields: [K.SUBJECT, K.DESCRIPTION, K.BLOCKLIST, K.DIAGRAM, K.SVG],
+    fields: [K.SUBJECT, K.DEADLINE, K.DESCRIPTION, K.BLOCKLIST, K.DIAGRAM, K.SVG],
     required: [K.SUBJECT, K.DESCRIPTION],
   },
   entry: {
@@ -84,7 +93,7 @@ const FORMS = {
   block: {
     marker: BLOCK_MARKER,
     label: '블록 정보',
-    fields: [K.SUBJECT, K.BLOCK, K.DESCRIPTION, K.PROGRESS, K.DIAGRAM, K.SVG],
+    fields: [K.SUBJECT, K.BLOCK, K.DESCRIPTION, K.PROGRESS, K.DEADLINE, K.DIAGRAM, K.SVG],
     required: [K.SUBJECT, K.BLOCK, K.DESCRIPTION],
   },
 };
@@ -188,21 +197,7 @@ export function parseBlockText(text) {
   const parsed = parseStructured(text, 'block');
   if (!parsed.ok) return parsed;
 
-  const f = parsed.fields;
-  return {
-    ok: true,
-    value: {
-      subjectName: f[K.SUBJECT],
-      blockName: f[K.BLOCK],
-      description: f[K.DESCRIPTION],
-      // 없는 항목은 undefined(그대로 둠), '(지움)' 은 null/''(비움)
-      progressPercent: keepOrClear(f, K.PROGRESS, null),
-      diagramCode: keepOrClear(f, K.DIAGRAM, ''),
-      svgCode: keepOrClear(f, K.SVG, ''),
-    },
-    errors: [],
-    warnings: parsed.warnings,
-  };
+  return { ok: true, value: toValue('block', parsed.fields), errors: [], warnings: parsed.warnings };
 }
 
 /**
@@ -379,6 +374,10 @@ function parseBody(body, form) {
       delete fields[key];
     }
   }
+  if (fields[K.DEADLINE] === NO_DEADLINE_TOKEN || fields[K.DEADLINE] === CLEAR_TOKEN) {
+    cleared.add(K.DEADLINE);
+    delete fields[K.DEADLINE];
+  }
 
   // ─ 필수 항목 ─
   const missing = form.required.filter((key) => !Object.hasOwn(fields, key));
@@ -392,6 +391,13 @@ function parseBody(body, form) {
   if (Object.hasOwn(fields, K.DATE) && !isValidDateKey(fields[K.DATE])) {
     errors.push(
       `날짜 형식이 올바르지 않습니다: "${fields[K.DATE]}" (YYYY-MM-DD 로 적어주세요)`
+    );
+  }
+
+  // 한 줄 값이라 앞뒤 공백은 위에서 이미 걷혔다 ("마감:  2026-10-31 " → "2026-10-31")
+  if (Object.hasOwn(fields, K.DEADLINE) && !isValidDateKey(fields[K.DEADLINE])) {
+    errors.push(
+      `마감 형식이 올바르지 않습니다: "${fields[K.DEADLINE]}" (YYYY-MM-DD 로 적어주세요. 마감을 지우려면 '${NO_DEADLINE_TOKEN}')`
     );
   }
 
@@ -489,6 +495,8 @@ function toValue(kind, f) {
       blockNames: Object.hasOwn(f, K.BLOCKLIST) ? splitBlockNames(f[K.BLOCKLIST]) : null,
       diagramCode: f[K.DIAGRAM] ?? '',
       svgCode: f[K.SVG] ?? '',
+      // 설명·그림과 달리 마감은 적은 경우에만 바꾼다: undefined(그대로) · null(지움) · 'YYYY-MM-DD'
+      deadline: keepOrClear(f, K.DEADLINE, null),
     };
   }
   if (kind === 'block') {
@@ -500,6 +508,7 @@ function toValue(kind, f) {
       progressPercent: keepOrClear(f, K.PROGRESS, null),
       diagramCode: keepOrClear(f, K.DIAGRAM, ''),
       svgCode: keepOrClear(f, K.SVG, ''),
+      deadline: keepOrClear(f, K.DEADLINE, null),
     };
   }
   return {
@@ -722,6 +731,7 @@ export function buildSubjectInfoText(subject, blocks = []) {
 function subjectRows(subject, blocks) {
   return [
     [K.SUBJECT, subject?.name],
+    [K.DEADLINE, deadlineOf(subject)],
     [K.DESCRIPTION, subject?.description, 'block'],
     [K.BLOCKLIST, blocks.map((b) => b.name).join('\n'), 'block'],
     [K.DIAGRAM, subject?.diagramCode, 'fence'],
@@ -777,9 +787,15 @@ function blockRows(subject, block) {
     [K.BLOCK, block?.name],
     [K.DESCRIPTION, block?.description, 'block'],
     [K.PROGRESS, block?.progressPercent],
+    [K.DEADLINE, deadlineOf(block)],
     [K.DIAGRAM, block?.diagramCode, 'fence'],
     [K.SVG, block?.svgCode, 'block'],
   ];
+}
+
+/** 내보낼 마감 — 읽을 수 없는 값은 내보내지 않는다 (되붙였을 때 오류가 나지 않게) */
+function deadlineOf(unit) {
+  return isValidDateKey(unit?.deadline) ? unit.deadline : null;
 }
 
 function entryRows(subject, block, entry) {
@@ -855,6 +871,7 @@ export function summarizeSelfInfo(unit) {
   const parts = [];
   if (String(unit?.description ?? '').trim()) parts.push('설명');
   if (unit?.progressPercent != null) parts.push('진행률');
+  if (isValidDateKey(unit?.deadline)) parts.push('마감');
   if (String(unit?.diagramCode ?? '').trim()) parts.push('다이어그램');
   if (String(unit?.svgCode ?? '').trim()) parts.push('SVG');
   return parts.length > 0 ? parts.join(' · ') : '아직 채운 항목 없음';

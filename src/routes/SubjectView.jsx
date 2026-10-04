@@ -7,6 +7,8 @@ import {
   selectProgress,
   selectDaysSinceActive,
   selectSubjectEntries,
+  isProgressDone,
+  sortByDeadline,
 } from '../state/selectors.js';
 import Breadcrumb from '../components/Breadcrumb.jsx';
 import BlockRow from '../components/BlockRow.jsx';
@@ -22,6 +24,9 @@ import ExchangeBar from '../components/ExchangeBar.jsx';
 import PasteImportSheet from '../components/PasteImportSheet.jsx';
 import ManualCopySheet, { useTextExport } from '../components/ManualCopySheet.jsx';
 import Sheet from '../components/Sheet.jsx';
+import DeadlineBadge from '../components/DeadlineBadge.jsx';
+import DeadlineField from '../components/DeadlineField.jsx';
+import SortSelect from '../components/SortSelect.jsx';
 import NotFound from './NotFound.jsx';
 import { activityAlpha } from '../lib/color.js';
 import { formatRelativeDay } from '../lib/date.js';
@@ -58,6 +63,7 @@ export default function SubjectView() {
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [importing, setImporting] = useState(null); // 'info' | 'bundle'
+  const [blockSort, setBlockSort] = useState('order'); // 'order' | 'deadline'
 
   const { exportText, manualCopyProps } = useTextExport(actions.setNotice);
 
@@ -65,6 +71,8 @@ export default function SubjectView() {
   if (!subject) return <NotFound />;
 
   const blocks = selectBlocks(index, subjectId);
+  // 정렬은 보여주기만 바꾼다. 내보내기·블록 순서(order)는 그대로다.
+  const shownBlocks = blockSort === 'deadline' ? sortByDeadline(blocks, (b) => b.deadline) : blocks;
   const progress = selectProgress(state, index, subjectId);
   const daysSince = selectDaysSinceActive(index, subjectId);
   const alpha = activityAlpha(daysSince, state.settings.inactivityDays);
@@ -151,6 +159,7 @@ export default function SubjectView() {
       <div className="subjecthead">
         <SubjectDot subject={subject} alpha={alpha} size={14} />
         <h1 className="page__title">{subject.name || '(이름 없음)'}</h1>
+        <DeadlineBadge deadline={subject.deadline} done={isProgressDone(progress)} />
       </div>
 
       <ProgressBar
@@ -181,7 +190,7 @@ export default function SubjectView() {
         groups={[
           {
             label: '이 과목 정보',
-            hint: '설명 · 블록 목록 · 다이어그램 · SVG',
+            hint: '설명 · 마감 · 블록 목록 · 다이어그램 · SVG',
             actions: [
               { kind: 'export', label: '과목 정보 내보내기', onClick: exportInfo },
               { kind: 'import', label: '과목 정보 가져오기', onClick: () => setImporting('info') },
@@ -218,6 +227,7 @@ export default function SubjectView() {
       <section className="section">
         <div className="section__head">
           <h2 className="section__title">블록 {blocks.length}개</h2>
+          {blocks.length > 1 && <SortSelect value={blockSort} onChange={setBlockSort} label="블록 정렬" />}
         </div>
 
         {blocks.length === 0 ? (
@@ -226,7 +236,7 @@ export default function SubjectView() {
           </div>
         ) : (
           <ul className="stack">
-            {blocks.map((block) => (
+            {shownBlocks.map((block) => (
               <li key={block.id}>
                 <BlockRow
                   block={block}
@@ -271,7 +281,7 @@ export default function SubjectView() {
         open={importing === 'info'}
         onClose={() => setImporting(null)}
         title="과목 정보 가져오기"
-        hint={`claude.ai 가 만들어 준 ---SUBJECT--- 형식 텍스트를 붙여넣으세요. '${subject.name}' 의 설명·다이어그램·SVG 를 덮어쓰고, '블록 목록' 이 적혀 있으면 없는 블록을 만듭니다. (이미 있는 이름은 건드리지 않습니다)`}
+        hint={`claude.ai 가 만들어 준 ---SUBJECT--- 형식 텍스트를 붙여넣으세요. '${subject.name}' 의 설명·다이어그램·SVG 를 덮어쓰고, '블록 목록' 이 적혀 있으면 없는 블록을 만듭니다. (이미 있는 이름은 건드리지 않습니다) '마감' 은 적혀 있을 때만 바꾸고, '마감: 없음' 이면 지웁니다.`}
         placeholder={`---SUBJECT---\n과목: ${subject.name}\n\n설명:\n…\n\n블록 목록:\n1주차\n2주차\n---END---`}
         parse={readInfo}
         applyLabel="과목 정보 갱신"
@@ -466,6 +476,8 @@ function SubjectSettings({ open, subject, blockCount, onClose, onSave, onRequest
                 description: form.description,
                 diagramCode: form.diagramCode,
                 svgCode: form.svgCode,
+                // 빈칸은 '마감 없음'
+                deadline: form.deadline || null,
               })
             }
           >
@@ -494,6 +506,12 @@ function SubjectSettings({ open, subject, blockCount, onClose, onSave, onRequest
           <strong> 과목 정보 가져오기</strong> 의 &quot;블록 목록&quot; 으로 한 번에 만드세요.
         </p>
       </div>
+
+      <DeadlineField
+        id="subject-edit-deadline"
+        value={form.deadline}
+        onChange={(deadline) => patch({ deadline })}
+      />
 
       <div className="field">
         <span className="field__label">색상</span>
@@ -585,5 +603,6 @@ function toForm(subject) {
     description: subject.description ?? '',
     diagramCode: subject.diagramCode ?? '',
     svgCode: subject.svgCode ?? '',
+    deadline: subject.deadline ?? '',
   };
 }

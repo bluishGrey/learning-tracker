@@ -9,7 +9,7 @@
  */
 
 import { newId } from '../lib/id.js';
-import { todayKey } from '../lib/date.js';
+import { todayKey, isValidDateKey } from '../lib/date.js';
 import { normalizeHex } from '../lib/color.js';
 
 /**
@@ -47,6 +47,8 @@ import { normalizeHex } from '../lib/color.js';
  * (버전을 올리면 예전 앱이 새 백업을 '더 새로운 버전'이라며 거부한다)
  *   - Block.infoUpdatedAt (ISO | null) — 블록 정보(설명·진행률·그림)를 마지막으로
  *     가져오거나 고친 시각. 없으면 '모름'으로 보고 낡음 표시의 근거가 된다.
+ *   - Subject.deadline / Block.deadline ('YYYY-MM-DD' | null) — 마감일. 없으면(undefined·null)
+ *     '마감 없음'이다. D-day 는 저장하지 않고 화면에서 매번 lib/date.js 로 계산한다.
  */
 export const SCHEMA_VERSION = 5;
 
@@ -221,6 +223,16 @@ export function normalizePercent(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return null;
   return Math.min(100, Math.max(0, Math.round(n)));
+}
+
+/**
+ * 마감일은 실존하는 'YYYY-MM-DD' 문자열 또는 null 이다.
+ * 빈 값·형식이 틀린 값은 null('마감 없음')로 떨어뜨린다.
+ */
+export function normalizeDeadline(value) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return isValidDateKey(trimmed) ? trimmed : null;
 }
 
 function trimToNull(value) {

@@ -187,6 +187,7 @@ export function validateStateShape(data) {
     if (s.svgCode != null && typeof s.svgCode !== 'string') {
       errors.push({ path: at('svgCode'), message: 'SVG 코드가 문자열이 아닙니다.' });
     }
+    warnings.push(...checkDeadline(s.deadline, at('deadline'), '과목 마감일'));
   });
 
   // ─ Block ─
@@ -229,6 +230,7 @@ export function validateStateShape(data) {
     if (b.infoUpdatedAt != null && (typeof b.infoUpdatedAt !== 'string' || Number.isNaN(Date.parse(b.infoUpdatedAt)))) {
       warnings.push({ path: at('infoUpdatedAt'), message: '블록 정보 갱신 시각을 읽을 수 없어 "모름"으로 처리합니다.' });
     }
+    warnings.push(...checkDeadline(b.deadline, at('deadline'), '블록 마감일'));
   });
 
   // ─ Entry ─
@@ -298,6 +300,18 @@ function checkPercent(value, path, label) {
     return [{ path, message: `${label}이 0~100 범위를 벗어났습니다. (${n}) 표시할 때 범위 안으로 맞춥니다.` }];
   }
   return [];
+}
+
+/**
+ * 마감일('YYYY-MM-DD' 또는 없음) 검사.
+ *
+ * 필드만 추가된 선택 항목이라 예전 백업에는 아예 없다 — 없는 게 정상이다.
+ * 형식이 틀려도 경고만 한다. 화면과 내보내기는 읽을 수 없는 마감을 '마감 없음'으로 본다.
+ */
+function checkDeadline(value, path, label) {
+  if (value == null || value === '') return [];
+  if (isValidDateKey(value)) return [];
+  return [{ path, message: `${label}을 읽을 수 없어 '마감 없음'으로 처리합니다. (받은 값: ${JSON.stringify(value)})` }];
 }
 
 export function countEntities(data) {

@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore, useActions } from '../state/StoreContext.jsx';
-import { selectSubjectList, selectNextAutoHue } from '../state/selectors.js';
+import { selectSubjectList, selectNextAutoHue, sortByDeadline } from '../state/selectors.js';
 import Breadcrumb from '../components/Breadcrumb.jsx';
 import SubjectCard from '../components/SubjectCard.jsx';
 import ColorPicker from '../components/ColorPicker.jsx';
 import Sheet from '../components/Sheet.jsx';
+import SortSelect from '../components/SortSelect.jsx';
 
 /** 경로 B의 첫 단계 — 과목 목록 (진도율·활성도) */
 export default function SubjectListView() {
@@ -16,8 +17,10 @@ export default function SubjectListView() {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const [customColor, setCustomColor] = useState(null);
+  const [sort, setSort] = useState('order'); // 'order' | 'deadline'
 
-  const rows = selectSubjectList(state, index);
+  const listed = selectSubjectList(state, index);
+  const rows = sort === 'deadline' ? sortByDeadline(listed, (row) => row.subject.deadline) : listed;
   // 이 과목이 받게 될 자동 배정 색 — 피커의 기본값으로 미리 보여준다.
   const nextAutoHue = selectNextAutoHue(state);
 
@@ -46,6 +49,12 @@ export default function SubjectListView() {
       </button>
 
       <section className="section">
+        {rows.length > 0 && (
+          <div className="section__head">
+            <h2 className="section__title">과목 {rows.length}개</h2>
+            <SortSelect value={sort} onChange={setSort} label="과목 정렬" />
+          </div>
+        )}
         {rows.length === 0 ? (
           <div className="empty">
             아직 과목이 없습니다. 먼저 과목을 만들고, 그 안에 진도 단위(블록)를 추가하세요.

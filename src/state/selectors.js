@@ -14,6 +14,7 @@ import {
   parseDateKey,
   toDateKey,
   addDays,
+  compareDeadline,
 } from '../lib/date.js';
 import { activityAlpha, densityAlpha, nextFreeHueIndex } from '../lib/color.js';
 import { confusionRowsOf, rowMatches } from '../lib/confusionTable.js';
@@ -96,6 +97,19 @@ export function selectProgress(state, index, subjectId) {
     hasTarget: total > 0,
     percent: total > 0 ? Math.round((completed / total) * 100) : 0,
   };
+}
+
+/**
+ * 과목을 '끝냈다'고 볼 수 있는지 — 과목에는 완료 체크가 없으므로 블록이 하나 이상 있고
+ * 전부 완료됐을 때만 그렇게 본다. 지난 마감의 경고색을 거두는 기준이다.
+ */
+export function isProgressDone(progress) {
+  return progress.hasTarget && progress.completed === progress.total;
+}
+
+/** 마감 이른 순. 마감이 없는 항목은 맨 뒤, 같은 마감끼리는 원래 순서를 지킨다 (sort 는 안정 정렬) */
+export function sortByDeadline(list, deadlineOf) {
+  return [...list].sort((a, b) => compareDeadline(deadlineOf(a), deadlineOf(b)));
 }
 
 /**

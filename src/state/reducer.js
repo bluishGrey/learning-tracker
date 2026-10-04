@@ -16,6 +16,7 @@ import {
   normalizeDiagram,
   normalizePercent,
   normalizeCustomColor,
+  normalizeDeadline,
   createInitialState,
 } from '../storage/schema.js';
 import { nextFreeHueIndex } from '../lib/color.js';
@@ -102,6 +103,10 @@ export function reducer(state, action) {
       if (action.patch.svgCode !== undefined) {
         patch.svgCode = normalizeSvg(action.patch.svgCode);
       }
+      // null 이나 빈 값을 넘기면 마감이 지워진다
+      if (action.patch.deadline !== undefined) {
+        patch.deadline = normalizeDeadline(action.patch.deadline);
+      }
       return touch({
         ...state,
         subjects: {
@@ -178,6 +183,7 @@ export function reducer(state, action) {
       if (p.progressPercent !== undefined) patch.progressPercent = normalizePercent(p.progressPercent);
       if (p.diagramCode !== undefined) patch.diagramCode = normalizeDiagram(p.diagramCode);
       if (p.svgCode !== undefined) patch.svgCode = normalizeSvg(p.svgCode);
+      if (p.deadline !== undefined) patch.deadline = normalizeDeadline(p.deadline);
 
       const at = nowIso();
       // 블록 정보 갱신 시각: 가져오기(markInfo)는 값이 같아도 '지금 기준으로 확인됨'이라 찍고,
@@ -395,6 +401,10 @@ function applyBundlePlan(state, plan) {
           description: String(plan.subjectPatch.description ?? ''),
           diagramCode: normalizeDiagram(plan.subjectPatch.diagramCode),
           svgCode: normalizeSvg(plan.subjectPatch.svgCode),
+          // 마감은 적힌 경우에만 바꾼다 (빠지면 그대로, '없음'이면 null)
+          ...(plan.subjectPatch.deadline !== undefined && {
+            deadline: normalizeDeadline(plan.subjectPatch.deadline),
+          }),
           updatedAt: at,
         },
       }
@@ -413,6 +423,7 @@ function applyBundlePlan(state, plan) {
     if (p.progressPercent !== undefined) patch.progressPercent = normalizePercent(p.progressPercent);
     if (p.diagramCode !== undefined) patch.diagramCode = normalizeDiagram(p.diagramCode);
     if (p.svgCode !== undefined) patch.svgCode = normalizeSvg(p.svgCode);
+    if (p.deadline !== undefined) patch.deadline = normalizeDeadline(p.deadline);
 
     // ---BLOCK--- 문서로 받은 정보면 갱신 시각을 찍는다. 과목 정보의 '블록 목록'으로
     // 이름만 만든 뼈대(infoFromDoc === false)는 정보를 받은 게 아니므로 '모름'으로 둔다.

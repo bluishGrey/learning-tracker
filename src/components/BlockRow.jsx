@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import DeadlineBadge from './DeadlineBadge.jsx';
 
 /**
  * 블록 한 줄. 완료 토글은 링크와 분리해 별도 버튼으로 둔다
@@ -21,6 +22,7 @@ export default function BlockRow({ block, to, entryCount, onToggle }) {
 
       <Link to={to} className="blockrow__body">
         <span className="blockrow__name">{block.name || '(이름 없음)'}</span>
+        <DeadlineBadge deadline={block.deadline} done={block.isCompleted} />
         <span className="blockrow__meta">기록 {entryCount}개</span>
       </Link>
     </div>

@@ -1,4 +1,4 @@
-import { normalizeDiagram, normalizePercent, normalizeSvg } from '../storage/schema.js';
+import { normalizeDeadline, normalizeDiagram, normalizePercent, normalizeSvg } from '../storage/schema.js';
 
 /**
  * 블록 정보가 어떻게 바뀌는지 — 기록 가져오기에 ---BLOCK--- 가 함께 들어왔을 때 보여준다.
@@ -11,6 +11,7 @@ import { normalizeDiagram, normalizePercent, normalizeSvg } from '../storage/sch
 const FIELDS = [
   { key: 'description', label: '설명', norm: (v) => String(v ?? ''), show: (v) => (v ? `${v.split('\n').length}줄` : '없음') },
   { key: 'progressPercent', label: '진행률', norm: normalizePercent, show: (v) => (v == null ? '없음' : `${v}%`) },
+  { key: 'deadline', label: '마감', norm: normalizeDeadline, show: (v) => v ?? '없음' },
   { key: 'diagramCode', label: '다이어그램', norm: normalizeDiagram, show: (v) => (v ? `${v.split('\n').length}줄` : '없음') },
   { key: 'svgCode', label: 'SVG', norm: normalizeSvg, show: (v) => (v ? `${v.length}자` : '없음') },
 ];
