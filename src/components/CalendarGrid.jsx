@@ -12,6 +12,12 @@ import {
 /** 한 칸에 보여줄 라벨의 최대 개수. 넘으면 +N 으로 줄인다. */
 const MAX_LABELS = 3;
 
+/** 깃발에 마우스를 올렸을 때 보여줄 한 줄 — '통계 · Week 5 (D-day)' */
+function deadlineLine(item) {
+  const what = item.kind === 'subject' ? `${item.subject.name} (과목 마감)` : `${item.subject.name} · ${item.block.name}`;
+  return `${what} — ${item.done ? '완료' : item.info.label}`;
+}
+
 /**
  * 월 단위 캘린더.
  *
@@ -22,9 +28,15 @@ const MAX_LABELS = 3;
  * 칸 전체(그날 화면)와 라벨(그 기록)이 모두 링크다. <a> 안에 <a> 를 넣을 수 없으므로
  * 칸 링크는 칸을 덮는 투명한 층으로 깔고, 라벨 링크를 그 위에 올린다.
  *
- * @param {{ monthKey: string, labelsOnDate: (dateKey) => Array }} props
+ * ─ 마감 깃발 ─
+ * 마감이 있는 날은 칸 오른쪽 위에 ⚑ (여럿이면 ⚑2) 만 단다. 기록 라벨 자리를 뺏지 않기 위해서다 —
+ * 좁은 화면에서는 라벨 글자가 몇 자밖에 안 들어가서, 마감 이름까지 넣으면 둘 다 읽을 수 없다.
+ * 무엇의 마감인지는 마우스를 올리면(title) 보이고, 칸을 누르면 그날 화면의 '이 날 마감'에 나온다.
+ * 지났는데 끝나지 않은 것이 하나라도 있으면 --danger, 전부 끝났으면 흐리게.
+ *
+ * @param {{ monthKey: string, labelsOnDate: (dateKey) => Array, deadlinesOnDate?: (dateKey) => Array }} props
  */
-export default function CalendarGrid({ monthKey, labelsOnDate }) {
+export default function CalendarGrid({ monthKey, labelsOnDate, deadlinesOnDate = () => [] }) {
   const { year, month } = parseMonthKey(monthKey);
   const leading = firstWeekdayOfMonth(year, month);
   const total = daysInMonth(year, month);
@@ -60,6 +72,13 @@ export default function CalendarGrid({ monthKey, labelsOnDate }) {
           const overflow = labels.length - shown.length;
           const isToday = dateKey === today;
           const subjectNames = [...new Set(labels.map((l) => l.subject.name))];
+          const deadlines = deadlinesOnDate(dateKey);
+          const deadlineTip = deadlines.map(deadlineLine).join('\n');
+          const flagTone = deadlines.some((d) => d.info.overdue && !d.done)
+            ? ' calendar__flag--overdue'
+            : deadlines.every((d) => d.done)
+              ? ' calendar__flag--done'
+              : '';
 
           return (
             <div
@@ -75,11 +94,23 @@ export default function CalendarGrid({ monthKey, labelsOnDate }) {
                   labels.length > 0
                     ? `, 기록 ${labels.length}개 (${subjectNames.join(', ')})`
                     : ', 기록 없음'
-                }`}
+                }${deadlines.length > 0 ? `, 마감 ${deadlines.length}개 (${deadlineTip.replace(/\n/g, ', ')})` : ''}`}
               />
               <span className="calendar__num" aria-hidden="true">
                 {day}
               </span>
+              {deadlines.length > 0 && (
+                // 칸 링크 위에 올라가는 층이라 이것도 그날 화면으로 가는 링크로 둔다 (눌러도 같은 곳)
+                <Link
+                  to={`/day/${dateKey}`}
+                  className={`calendar__flag${flagTone}`}
+                  title={`마감\n${deadlineTip}`}
+                  aria-hidden="true"
+                  tabIndex={-1}
+                >
+                  ⚑{deadlines.length > 1 ? deadlines.length : ''}
+                </Link>
+              )}
               {shown.length > 0 && (
                 <span className="calendar__labels">
                   {shown.map((label) => (

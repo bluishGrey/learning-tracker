@@ -186,6 +186,22 @@ export function deadlineInfo(deadline, referenceKey = todayKey()) {
   return { days, overdue: days < 0, label };
 }
 
+/**
+ * 마감 모아 보기의 묶음 — 'overdue'(지남) · 'thisWeek' · 'nextWeek' · 'later'. 마감이 없으면 null.
+ *
+ * 주는 캘린더와 같이 **일요일에 시작**한다. 오늘이 목요일이면 이번 주는 토요일까지 사흘 남는다.
+ * (오늘부터 7일씩 끊으면 캘린더의 줄과 '이번 주'가 어긋난다)
+ */
+export function deadlineBucket(deadline, referenceKey = todayKey()) {
+  const info = deadlineInfo(deadline, referenceKey);
+  if (!info) return null;
+  if (info.overdue) return 'overdue';
+  const leftThisWeek = 6 - dateKeyToDate(referenceKey).getDay(); // 오늘 ~ 이번 주 토요일
+  if (info.days <= leftThisWeek) return 'thisWeek';
+  if (info.days <= leftThisWeek + 7) return 'nextWeek';
+  return 'later';
+}
+
 /** 마감일순 정렬 비교 함수 — 이른 마감이 앞, 마감이 없는(또는 읽을 수 없는) 항목은 맨 뒤 */
 export function compareDeadline(a, b) {
   const ka = isValidDateKey(a) ? a : null;

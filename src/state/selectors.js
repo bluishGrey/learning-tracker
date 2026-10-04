@@ -15,6 +15,8 @@ import {
   toDateKey,
   addDays,
   compareDeadline,
+  deadlineInfo,
+  deadlineBucket,
 } from '../lib/date.js';
 import { activityAlpha, densityAlpha, nextFreeHueIndex } from '../lib/color.js';
 import { confusionRowsOf, rowMatches } from '../lib/confusionTable.js';
@@ -557,6 +559,83 @@ export function selectCalendarLabels(state, index, dateKey) {
 
   // entriesByDate 는 이미 생성 순이라 안정 정렬로 과목 순서만 맞추면 된다
   return labels.sort((a, b) => (rank.get(a.subject.id) ?? 0) - (rank.get(b.subject.id) ?? 0));
+}
+
+// ─── 마감 ─────────────────────────────────────────────────
+
+/**
+ * 마감이 있는 과목·블록 전부 — 마감 이른 순 (같은 날이면 과목 순서, 과목 마감이 그 과목 블록보다 앞).
+ *
+ * 캘린더 깃발 · 홈의 '마감 일정' · 그날 화면의 '이 날 마감'이 모두 이 목록 하나를 쓴다.
+ * 마감은 Subject/Block 의 deadline 필드가 진실 공급원이고, D-day 는 여기서 매번 계산한다.
+ *
+ * done — 블록은 완료 체크, 과목은 블록이 하나 이상 있고 전부 완료(isProgressDone).
+ *
+ * @returns {Array<{ key, kind: 'subject'|'block', subject, block, deadline, info, done, progressPercent }>}
+ */
+export function selectDeadlineItems(state, index, today = todayKey()) {
+  const items = [];
+  for (const subjectId of state.subjectOrder) {
+    const subject = state.subjects[subjectId];
+    if (!subject) continue;
+
+    const subjectInfo = deadlineInfo(subject.deadline, today);
+    if (subjectInfo) {
+      const progress = selectProgress(state, index, subjectId);
+      items.push({
+        key: `s:${subjectId}`,
+        kind: 'subject',
+        subject,
+        block: null,
+        deadline: subject.deadline,
+        info: subjectInfo,
+        done: isProgressDone(progress),
+        progressPercent: progress.hasTarget ? progress.percent : null,
+      });
+    }
+
+    for (const block of index.blocksBySubject.get(subjectId) ?? []) {
+      const info = deadlineInfo(block.deadline, today);
+      if (!info) continue;
+      const progress = selectBlockDisplayProgress(index, block);
+      items.push({
+        key: `b:${block.id}`,
+        kind: 'block',
+        subject,
+        block,
+        deadline: block.deadline,
+        info,
+        done: Boolean(block.isCompleted),
+        progressPercent: progress.hasValue ? progress.percent : null,
+      });
+    }
+  }
+  return sortByDeadline(items, (item) => item.deadline);
+}
+
+/** 마감 목록 → 날짜별 묶음 (캘린더 깃발용) */
+export function groupDeadlinesByDate(items) {
+  const byDate = new Map();
+  for (const item of items) {
+    if (!byDate.has(item.deadline)) byDate.set(item.deadline, []);
+    byDate.get(item.deadline).push(item);
+  }
+  return byDate;
+}
+
+/** 홈 '마감 일정'이 보는 범위 — 지난 것(미완료)은 전부, 앞으로는 이 일수까지 */
+export const UPCOMING_DEADLINE_DAYS = 30;
+
+/**
+ * 홈 '마감 일정' — 아직 끝나지 않은 것 중 지난 것 전부 + 앞으로 30일 이내.
+ * 완료한 것은 뺀다 (끝낸 일이 급한 일 사이에 섞이면 목록이 길어지기만 한다).
+ *
+ * @returns {Array<item & { bucket: 'overdue'|'thisWeek'|'nextWeek'|'later' }>}
+ */
+export function selectUpcomingDeadlines(state, index, today = todayKey(), days = UPCOMING_DEADLINE_DAYS) {
+  return selectDeadlineItems(state, index, today)
+    .filter((item) => !item.done && (item.info.overdue || item.info.days <= days))
+    .map((item) => ({ ...item, bucket: deadlineBucket(item.deadline, today) }));
 }
 
 // ─── Entry 문맥 (반대 경로 점프용) ──────────────────────────
