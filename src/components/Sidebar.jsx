@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Link, matchPath, useLocation } from 'react-router-dom';
 import { useStore } from '../state/StoreContext.jsx';
-import { selectBlocks, selectBlockEntries, selectSearch, SEARCH_LIMIT } from '../state/selectors.js';
+import {
+  selectBlocks,
+  selectBlockEntries,
+  selectSearch,
+  selectProgress,
+  isProgressDone,
+  SEARCH_LIMIT,
+} from '../state/selectors.js';
 import SubjectDot from './SubjectDot.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
 import StaleBadge from './StaleBadge.jsx';
@@ -121,6 +128,7 @@ export default function Sidebar({ open, onNavigate, searchRef, onOpenHelp }) {
         />
       ) : (
         <TreeSection
+          state={state}
           subjects={subjects}
           index={index}
           activeIds={activeIds}
@@ -149,6 +157,7 @@ export default function Sidebar({ open, onNavigate, searchRef, onOpenHelp }) {
 
 /** 과목 → 블록 → 기록 트리 */
 function TreeSection({
+  state,
   subjects,
   index,
   activeIds,
@@ -200,6 +209,12 @@ function TreeSection({
                     </span>
                     <SubjectDot subject={subject} size={9} />
                     <span className="tree__label">{subject.name || '(이름 없음)'}</span>
+                    {/* 과목 목록 카드와 같은 기준 — 블록이 하나 이상 있고 전부 완료돼야 '끝난 과목' */}
+                    <DeadlineBadge
+                      deadline={subject.deadline}
+                      done={isProgressDone(selectProgress(state, index, subject.id))}
+                      compact
+                    />
                     <span className="tree__count">{blocks.length}</span>
                   </button>
                   <Link
