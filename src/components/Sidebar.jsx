@@ -5,6 +5,7 @@ import { selectBlocks, selectBlockEntries, selectSearch, SEARCH_LIMIT } from '..
 import SubjectDot from './SubjectDot.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
 import StaleBadge from './StaleBadge.jsx';
+import DeadlineBadge from './DeadlineBadge.jsx';
 import Highlight from './Highlight.jsx';
 import { useOpenDailyImport } from './DailyImport.jsx';
 import { entryTitle } from '../lib/entryTitle.js';
@@ -243,6 +244,7 @@ function TreeSection({
                               >
                                 {block.name || '(이름 없음)'}
                               </span>
+                              <DeadlineBadge deadline={block.deadline} done={block.isCompleted} compact />
                               <span className="tree__count">{entries.length}</span>
                             </button>
                             <StaleBadge subject={subject} block={block} variant="icon" />
