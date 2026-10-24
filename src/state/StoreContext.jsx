@@ -26,7 +26,7 @@ import {
   listSnapshots,
 } from '../storage/persist.js';
 import { downloadBackup, backupToText } from '../storage/exportData.js'; // backupToText 추가: 봉투 글자를 만드는 기존 기능
-import { uploadToServer } from '../storage/serverSync.js';               // 방금 만든 택배 기사 파일에서 가져온다
+import { uploadToServer, downloadFromServer } from '../storage/serverSync.js';               // 방금 만든 택배 기사 파일에서 가져온다
 import {
   readFileAsText,
   parseBackupText,
@@ -120,7 +120,36 @@ export function StoreProvider({ children }) {
       dispatch({ type: ACTIONS.DATA_REPLACE, state: result.state });
       return result;
     };
+    /**
+     * 글자(봉투)를 검사하고 가져오기 준비를 한다.
+     * 파일에서 읽었든 서버에서 받았든 '글자가 된 뒤'의 과정은 같으므로 한 곳에 둔다.
+     * 이 시점까지 저장소는 건드리지 않는다.
+     */
+    const prepareImportFromText = (text) => {
+      const parsed = parseBackupText(text);                 // 글자를 해석하고 봉투가 맞는지 검사한다
+      if (!parsed.ok) {                                     // 검사에 실패하면
+        setNotice({
+          level: 'error',
+          message: `가져오기를 중단했습니다. 기존 데이터는 그대로입니다.\n\n${formatErrors(parsed.errors)}`,
+        });                                                 // 이유를 알림 자리에 띄우고
+        return { ok: false, needsChoice: false, pending: null }; // 여기서 멈춘다
+      }
 
+      const preview = previewImport(stateRef.current, parsed.backup); // 지금 기록과 비교한 미리보기를 만든다
+
+      // 지금 기록이 비어 있으면 물어볼 게 없다. 바로 덮어쓴다.
+      if (preview.isEmpty) {
+        commitImport(parsed.backup, IMPORT_MODE.OVERWRITE);
+        return { ok: true, needsChoice: false, pending: null };
+      }
+
+      // 기록이 있으면 덮어쓸지 합칠지 물어봐야 한다. 선택 창에 줄 재료를 돌려준다.
+      return {
+        ok: true,
+        needsChoice: true,
+        pending: { backup: parsed.backup, preview, warnings: parsed.warnings },
+      };
+    };
     return {
       // Subject
       addSubject: (input) => withId(ACTIONS.SUBJECT_ADD, input),
@@ -190,36 +219,23 @@ export function StoreProvider({ children }) {
        * @returns {{ ok, needsChoice, pending, message }}
        */
       async prepareImport(file) {
-        const read = await readFileAsText(file);
+        const read = await readFileAsText(file);              // 파일을 글자로 읽는다 (기존과 같음)
         if (!read.ok) {
           setNotice({ level: 'error', message: `${read.error} 기존 데이터는 그대로입니다.` });
           return { ok: false, needsChoice: false, pending: null };
         }
-
-        const parsed = parseBackupText(read.text);
-        if (!parsed.ok) {
-          setNotice({
-            level: 'error',
-            message: `가져오기를 중단했습니다. 기존 데이터는 그대로입니다.\n\n${formatErrors(parsed.errors)}`,
-          });
-          return { ok: false, needsChoice: false, pending: null };
-        }
-
-        const preview = previewImport(stateRef.current, parsed.backup);
-
-        // 기존 데이터가 없으면 물어볼 게 없다 (초기화된 공용 PC 시나리오).
-        if (preview.isEmpty) {
-          commitImport(parsed.backup, IMPORT_MODE.OVERWRITE);
-          return { ok: true, needsChoice: false, pending: null };
-        }
-
-        return {
-          ok: true,
-          needsChoice: true,
-          pending: { backup: parsed.backup, preview, warnings: parsed.warnings },
-        };
+        return prepareImportFromText(read.text);              // 글자가 된 뒤의 과정은 공용 함수가 맡는다
       },
 
+      /** 서버에 보관된 백업을 받아와 가져오기 준비를 한다 (이후 과정은 파일 불러오기와 같다) */
+      async prepareServerImport() {
+        const result = await downloadFromServer();            // 택배 기사에게 받아 오게 한다
+        if (!result.ok) {                                     // 못 받았으면
+          setNotice({ level: 'error', message: result.error });   // 이유를 알림 자리에 띄우고
+          return { ok: false, needsChoice: false, pending: null }; // 여기서 멈춘다
+        }
+        return prepareImportFromText(result.text);            // 받은 글자를 같은 뒷길에 넘긴다
+      },
       commitImport,
 
       /** 가져오기 직전 스냅샷으로 되돌리기 */
