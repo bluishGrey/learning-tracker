@@ -18,7 +18,7 @@ export default function AppHeader({ sidebarOpen, onToggleSidebar }) {
   const headerRef = useRef(null);
   const [pending, setPending] = useState(null);
   const [busy, setBusy] = useState(false);
-
+  const [uploading, setUploading] = useState(false); // 서버에 올리는 중인지 기억해 두는 칸
   /*
    * 상단 바 높이를 재서 --appbar-h 에 넣는다.
    * 사이드바와 알림이 이 값에 기대어 자리를 잡는데, 상태 문구가 두 줄로 접히거나
@@ -50,6 +50,12 @@ export default function AppHeader({ sidebarOpen, onToggleSidebar }) {
     if (result.needsChoice) setPending(result.pending);
   };
 
+  const handleUpload = async () => {
+    setUploading(true);              // "올리는 중"이라고 기억해 둔다 (버튼이 잠기고 글자가 바뀐다)
+    await actions.uploadBackup();    // 서류 담당의 "서버에 올리기" 동작을 부르고, 끝날 때까지 기다린다
+    setUploading(false);             // 끝났으니 "올리는 중"을 푼다 (버튼이 다시 눌린다)
+  };
+
   const status = describeStatus(exportStatus);
 
   return (
@@ -77,6 +83,14 @@ export default function AppHeader({ sidebarOpen, onToggleSidebar }) {
               onClick={() => actions.exportBackup()}
             >
               ⬇ 내보내기
+            </button>
+            <button
+              type="button"
+              className="btn btn--sm"
+              onClick={handleUpload}
+              disabled={uploading}
+            >
+              ☁ {uploading ? '올리는 중…' : '서버에 올리기'}
             </button>
             <button
               type="button"

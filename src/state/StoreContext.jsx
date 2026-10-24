@@ -25,7 +25,8 @@ import {
   restoreSnapshot,
   listSnapshots,
 } from '../storage/persist.js';
-import { downloadBackup } from '../storage/exportData.js';
+import { downloadBackup, backupToText } from '../storage/exportData.js'; // backupToText 추가: 봉투 글자를 만드는 기존 기능
+import { uploadToServer } from '../storage/serverSync.js';               // 방금 만든 택배 기사 파일에서 가져온다
 import {
   readFileAsText,
   parseBackupText,
@@ -169,6 +170,19 @@ export function StoreProvider({ children }) {
           setNotice({ level: 'error', message: result.error });
         }
         return result;
+      },
+
+      /** 서버에 올리기 — 성공하면 내보내기와 똑같이 '최신 상태'로 표시한다 */
+      async uploadBackup() {
+        const now = new Date();                               // 지금 시각 (내보낸 시각으로 기록할 값)
+        const text = backupToText(stateRef.current, now);     // 지금 기록들을 봉투 글자로 만든다 (파일 내보내기와 같은 방식)
+        const result = await uploadToServer(text);            // 택배 기사에게 맡기고, 결과가 올 때까지 기다린다
+        if (result.ok) {
+          setNotice({ level: 'success', message: '서버에 올렸습니다.' });   // 알림 자리에 성공 문구
+        } else {
+          setNotice({ level: 'error', message: result.error });            // 알림 자리에 실패 이유
+        }
+        return result;                                        // 부른 쪽(버튼)에도 결과를 돌려준다
       },
 
       /**
