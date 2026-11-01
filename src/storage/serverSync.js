@@ -91,3 +91,25 @@ export async function downloadFromServer() {
     return { ok: false, text: null, error: '서버에 연결하지 못했습니다. 서버가 켜져 있는지 확인해 주세요.' };
   }
 }
+
+// 서버 상태를 한 번 확인하는 함수. 표시등이 쓴다. 결과는 아래 셋 중 하나의 글자로 돌려준다.
+//   'login'   : 서버가 켜져 있고, 지금 들고 있는 증표도 서버가 인정한다 (초록)
+//   'nologin' : 서버는 켜져 있지만 로그인이 필요하다 — 증표가 없거나 서버가 잊어버렸다 (노랑)
+//   'down'    : 서버에 연결하지 못했다 (빨강)
+export async function checkServer() {
+  try {
+    // 증표가 있을 때만 Authorization 칸을 붙인다 (없는데 붙이면 'null' 이라는 글자가 서버로 간다).
+    const headers = sessionId ? { Authorization: sessionId } : {};
+    const res = await fetch(`${SERVER_URL}/health`, { cache: 'no-store', headers });
+    if (!res.ok) return 'down';
+
+    // 서버의 /health 는 정확히 'login' 또는 'nologin' 만 답한다. 그 밖의 글자(다른 사이트의 안내 페이지 등)는 우리 서버의 답이 아니므로 'down' 으로 본다.
+    const text = (await res.text()).trim();
+    if (text === 'login') return 'login';
+    if (text === 'nologin') return 'nologin';
+    return 'down';
+  } catch {
+    // 답 자체가 안 온 경우: 서버가 꺼졌거나, 주소가 틀렸거나, 브라우저가 막았을 때
+    return 'down';
+  }
+}

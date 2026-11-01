@@ -4,6 +4,7 @@ import { useStore, useActions } from '../state/StoreContext.jsx';
 import { formatRelativeDay, toDateKey } from '../lib/date.js';
 import ImportDialog from './ImportDialog.jsx';
 import LoginDialog from './LoginDialog.jsx';
+import ServerLight from './ServerLight.jsx';
 import { isLoggedIn } from '../storage/serverSync.js';
 
 /**
@@ -22,6 +23,7 @@ export default function AppHeader({ sidebarOpen, onToggleSidebar }) {
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false); // 서버에 올리는 중인지 기억해 두는 칸
   const [downloading, setDownloading] = useState(false); // 서버에서 받아 오는 중인지 기억해 두는 칸
+  const [lightKey, setLightKey] = useState(0); // 올 때마다 바뀌는 번호. 바뀌면 표시등이 서버를 즉시 다시 확인한다
   const [loginFor, setLoginFor] = useState(null); // 로그인 창을 띄운 이유: 'upload' | 'download' | null (null이면 창이 닫혀 있음)
   
   /*
@@ -63,6 +65,7 @@ export default function AppHeader({ sidebarOpen, onToggleSidebar }) {
     setUploading(true);
     await actions.uploadBackup();
     setUploading(false);
+    setLightKey((k) => k + 1);       // 방금 서버와 주고받았으니 표시등도 바로 다시 확인
     if (!isLoggedIn()) setLoginFor('upload');   // 서버가 401로 거절해서 증표가 비워졌으면 다시 로그인 창
   };
 
@@ -74,6 +77,7 @@ export default function AppHeader({ sidebarOpen, onToggleSidebar }) {
     setDownloading(true);
     const result = await actions.prepareServerImport();
     setDownloading(false);
+    setLightKey((k) => k + 1);
     if (!isLoggedIn()) {             // 401로 증표가 비워졌으면 로그인 창을 다시 띄운다
       setLoginFor('download');
       return;
@@ -85,6 +89,7 @@ export default function AppHeader({ sidebarOpen, onToggleSidebar }) {
   const handleLoginSuccess = async () => {
     const task = loginFor;
     setLoginFor(null);
+    setLightKey((k) => k + 1);       // 로그인했으니 표시등이 초록으로 바뀌는지 바로 확인
     if (task === 'upload') await handleUpload();
     else if (task === 'download') await handleServerImport();
   };
@@ -110,6 +115,7 @@ export default function AppHeader({ sidebarOpen, onToggleSidebar }) {
               학습 트래커
             </Link>
             <div className="spacer" />
+            <ServerLight refreshKey={lightKey} />
             <button
               type="button"
               className="btn btn--sm"
