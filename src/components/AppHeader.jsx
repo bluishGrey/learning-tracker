@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { useStore, useActions } from '../state/StoreContext.jsx';
 import { formatRelativeDay, toDateKey } from '../lib/date.js';
 import ImportDialog from './ImportDialog.jsx';
+import LoginDialog from './LoginDialog.jsx';
+import { isLoggedIn } from '../storage/serverSync.js';
 
 /**
  * 항상 화면 상단에 붙어 있는 헤더.
@@ -20,6 +22,7 @@ export default function AppHeader({ sidebarOpen, onToggleSidebar }) {
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false); // 서버에 올리는 중인지 기억해 두는 칸
   const [downloading, setDownloading] = useState(false); // 서버에서 받아 오는 중인지 기억해 두는 칸
+  const [loginFor, setLoginFor] = useState(null); // 로그인 창을 띄운 이유: 'upload' | 'download' | null (null이면 창이 닫혀 있음)
   
   /*
    * 상단 바 높이를 재서 --appbar-h 에 넣는다.
@@ -52,17 +55,38 @@ export default function AppHeader({ sidebarOpen, onToggleSidebar }) {
     if (result.needsChoice) setPending(result.pending);
   };
 
-  const handleUpload = async () => {
-    setUploading(true);              // "올리는 중"이라고 기억해 둔다 (버튼이 잠기고 글자가 바뀐다)
-    await actions.uploadBackup();    // 서류 담당의 "서버에 올리기" 동작을 부르고, 끝날 때까지 기다린다
-    setUploading(false);             // 끝났으니 "올리는 중"을 푼다 (버튼이 다시 눌린다)
+    const handleUpload = async () => {
+    if (!isLoggedIn()) {             // 증표가 없으면 서버에 가지 않고 로그인 창부터 띄운다
+      setLoginFor('upload');
+      return;
+    }
+    setUploading(true);
+    await actions.uploadBackup();
+    setUploading(false);
+    if (!isLoggedIn()) setLoginFor('upload');   // 서버가 401로 거절해서 증표가 비워졌으면 다시 로그인 창
   };
 
   const handleServerImport = async () => {
-    setDownloading(true);                                   // "받아 오는 중"이라고 기억해 둔다 (버튼이 잠긴다)
-    const result = await actions.prepareServerImport();     // 서류 담당의 "서버에서 받아 검사까지" 동작을 부르고 기다린다
-    setDownloading(false);                                  // 끝났으니 풀어 준다
-    if (result.needsChoice) setPending(result.pending);     // 덮어쓰기/병합을 물어봐야 하면 선택 창에 줄 재료를 넘긴다
+    if (!isLoggedIn()) {
+      setLoginFor('download');
+      return;
+    }
+    setDownloading(true);
+    const result = await actions.prepareServerImport();
+    setDownloading(false);
+    if (!isLoggedIn()) {             // 401로 증표가 비워졌으면 로그인 창을 다시 띄운다
+      setLoginFor('download');
+      return;
+    }
+    if (result.needsChoice) setPending(result.pending);
+  };
+
+  // 로그인에 성공하면 창을 닫고, 원래 하려던 일(올리기/받기)을 이어서 실행한다.
+  const handleLoginSuccess = async () => {
+    const task = loginFor;
+    setLoginFor(null);
+    if (task === 'upload') await handleUpload();
+    else if (task === 'download') await handleServerImport();
   };
 
   const status = describeStatus(exportStatus);
@@ -133,6 +157,7 @@ export default function AppHeader({ sidebarOpen, onToggleSidebar }) {
       </header>
 
       <ImportDialog pending={pending} onClose={() => setPending(null)} />
+      <LoginDialog open={loginFor !== null} onClose={() => setLoginFor(null)} onSuccess={handleLoginSuccess} />
     </>
   );
 }
